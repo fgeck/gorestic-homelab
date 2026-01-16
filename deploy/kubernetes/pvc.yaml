@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-data
+  labels:
+    app.kubernetes.io/name: gorestic-homelab
+spec:
+  accessModes:
+    - ReadOnlyMany  # Adjust based on your storage class
+  resources:
+    requests:
+      storage: 10Gi  # Adjust based on your needs
+  # Uncomment and set your storage class
+  # storageClassName: nfs-client

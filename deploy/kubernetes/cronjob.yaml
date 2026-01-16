@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gorestic-backup
+  labels:
+    app.kubernetes.io/name: gorestic-homelab
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 3 * * *"  # Daily at 3 AM UTC
+  timeZone: "Etc/UTC"    # Adjust to your timezone
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600  # 1 hour timeout
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: gorestic-homelab
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: gorestic
+              image: ghcr.io/fgeck/gorestic-homelab:latest
+              imagePullPolicy: IfNotPresent
+              args: ["run", "--config", "/config/config.yaml"]
+              envFrom:
+                - secretRef:
+                    name: gorestic-secrets
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                # Uncomment if using SSH shutdown
+                # - name: ssh-key
+                #   mountPath: /root/.ssh
+                #   readOnly: true
+              resources:
+                requests:
+                  memory: "128Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: config
+              configMap:
+                name: gorestic-config
+            - name: data
+              persistentVolumeClaim:
+                claimName: backup-data
+            # Uncomment if using SSH shutdown
+            # - name: ssh-key
+            #   secret:
+            #     secretName: ssh-key
+            #     defaultMode: 0400
