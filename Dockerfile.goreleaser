@@ -1,0 +1,29 @@
+# Dockerfile for goreleaser builds
+# Uses pre-built binary from goreleaser
+FROM alpine:3.20
+
+LABEL org.opencontainers.image.source=https://github.com/fgeck/gorestic-homelab
+LABEL org.opencontainers.image.description="A restic backup orchestrator for homelab environments"
+LABEL org.opencontainers.image.licenses=MIT
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    restic \
+    postgresql16-client \
+    tzdata
+
+# Create non-root user
+RUN adduser -D -u 1000 gorestic
+
+# Copy pre-built binary
+COPY gorestic-homelab /usr/local/bin/gorestic-homelab
+
+# Set ownership
+RUN chown gorestic:gorestic /usr/local/bin/gorestic-homelab
+
+# Switch to non-root user
+USER gorestic
+
+ENTRYPOINT ["gorestic-homelab"]
+CMD ["--help"]

@@ -1,0 +1,109 @@
+version: 2
+
+project_name: gorestic-homelab
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gorestic-homelab
+    main: ./cmd/gorestic-homelab
+    binary: gorestic-homelab
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+dockers:
+  - image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-amd64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-arm64"
+    dockerfile: Dockerfile.goreleaser
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-amd64"
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/fgeck/gorestic-homelab:{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-amd64"
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/fgeck/gorestic-homelab:{{ .Major }}"
+    image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-amd64"
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/fgeck/gorestic-homelab:latest"
+    image_templates:
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-amd64"
+      - "ghcr.io/fgeck/gorestic-homelab:{{ .Version }}-arm64"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: fgeck
+    name: gorestic-homelab
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
