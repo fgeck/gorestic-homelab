@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gorestic-homelab.fullname" . }}-config
+  labels:
+    {{- include "gorestic-homelab.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    restic:
+      repository: {{ .Values.config.restic.repository | quote }}
+      password: "${RESTIC_PASSWORD}"
+      {{- if .Values.config.restic.restUser }}
+      rest_user: {{ .Values.config.restic.restUser | quote }}
+      {{- end }}
+      {{- if .Values.config.restic.restPassword }}
+      rest_password: {{ .Values.config.restic.restPassword | quote }}
+      {{- end }}
+
+    backup:
+      paths:
+        {{- toYaml .Values.config.backup.paths | nindent 8 }}
+      {{- if .Values.config.backup.tags }}
+      tags:
+        {{- toYaml .Values.config.backup.tags | nindent 8 }}
+      {{- end }}
+      {{- if .Values.config.backup.host }}
+      host: {{ .Values.config.backup.host | quote }}
+      {{- end }}
+
+    retention:
+      keep_daily: {{ .Values.config.retention.keepDaily }}
+      keep_weekly: {{ .Values.config.retention.keepWeekly }}
+      keep_monthly: {{ .Values.config.retention.keepMonthly }}
+
+    check:
+      enabled: {{ .Values.config.check.enabled }}
+      subset: {{ .Values.config.check.subset | quote }}
+
+    {{- if .Values.config.wol.enabled }}
+    wol:
+      mac_address: {{ .Values.config.wol.macAddress | quote }}
+      broadcast_ip: {{ .Values.config.wol.broadcastIp | quote }}
+      target_url: {{ .Values.config.wol.targetUrl | quote }}
+      timeout: {{ .Values.config.wol.timeout | quote }}
+      poll_interval: {{ .Values.config.wol.pollInterval | quote }}
+      stabilize_wait: {{ .Values.config.wol.stabilizeWait | quote }}
+    {{- end }}
+
+    {{- if .Values.config.postgres.enabled }}
+    postgres:
+      host: {{ .Values.config.postgres.host | quote }}
+      port: {{ .Values.config.postgres.port }}
+      database: {{ .Values.config.postgres.database | quote }}
+      username: {{ .Values.config.postgres.username | quote }}
+      password: "${POSTGRES_PASSWORD}"
+      format: {{ .Values.config.postgres.format | quote }}
+    {{- end }}
+
+    {{- if .Values.config.sshShutdown.enabled }}
+    ssh_shutdown:
+      host: {{ .Values.config.sshShutdown.host | quote }}
+      port: {{ .Values.config.sshShutdown.port }}
+      username: {{ .Values.config.sshShutdown.username | quote }}
+      key_path: {{ .Values.config.sshShutdown.keyPath | quote }}
+      shutdown_delay: {{ .Values.config.sshShutdown.shutdownDelay }}
+    {{- end }}
+
+    {{- if .Values.config.telegram.enabled }}
+    telegram:
+      bot_token: "${TELEGRAM_BOT_TOKEN}"
+      chat_id: "${TELEGRAM_CHAT_ID}"
+    {{- end }}

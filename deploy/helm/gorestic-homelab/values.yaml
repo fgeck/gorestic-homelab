@@ -1,0 +1,130 @@
+# Default values for gorestic-homelab
+
+image:
+  repository: ghcr.io/fgeck/gorestic-homelab
+  tag: ""  # Defaults to appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# CronJob schedule (cron format)
+schedule: "0 3 * * *"
+
+# Timezone for the schedule
+timeZone: "Etc/UTC"
+
+# Job configuration
+job:
+  backoffLimit: 2
+  activeDeadlineSeconds: 3600  # 1 hour
+  ttlSecondsAfterFinished: 86400  # 24 hours
+
+# History limits
+successfulJobsHistoryLimit: 3
+failedJobsHistoryLimit: 3
+
+# Resource limits
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Secrets - set your credentials here or use existingSecret
+secrets:
+  # Use an existing secret instead of creating one
+  existingSecret: ""
+  # Values below only used if existingSecret is empty
+  resticPassword: "changeme"
+  postgresPassword: ""
+  telegramBotToken: ""
+  telegramChatId: ""
+
+# Backup configuration
+config:
+  restic:
+    repository: "rest:http://rest-server:8000/backup/"
+    # Password is injected from secret via env var
+    restUser: ""
+    restPassword: ""
+
+  backup:
+    paths:
+      - /data
+    tags:
+      - kubernetes
+      - automated
+    host: ""  # Override hostname
+
+  retention:
+    keepDaily: 7
+    keepWeekly: 4
+    keepMonthly: 6
+
+  check:
+    enabled: true
+    subset: "5%"
+
+  # Wake-on-LAN (optional)
+  wol:
+    enabled: false
+    macAddress: ""
+    broadcastIp: "255.255.255.255"
+    targetUrl: ""
+    timeout: "5m"
+    pollInterval: "10s"
+    stabilizeWait: "10s"
+
+  # PostgreSQL backup (optional)
+  postgres:
+    enabled: false
+    host: ""
+    port: 5432
+    database: ""
+    username: "postgres"
+    format: "custom"  # custom, plain, tar
+
+  # SSH shutdown (optional)
+  sshShutdown:
+    enabled: false
+    host: ""
+    port: 22
+    username: "root"
+    keyPath: "/root/.ssh/id_rsa"
+    shutdownDelay: 1
+
+  # Telegram notifications (optional)
+  telegram:
+    enabled: false
+    # Token and chatId are injected from secrets
+
+# Persistence for backup data source
+persistence:
+  enabled: true
+  existingClaim: ""  # Use existing PVC
+  # Only used if existingClaim is empty
+  storageClass: ""
+  accessModes:
+    - ReadOnlyMany
+  size: 10Gi
+
+# SSH key for remote shutdown
+sshKey:
+  enabled: false
+  existingSecret: ""  # Use existing secret with SSH key
+  # Only used if existingSecret is empty
+  privateKey: ""
+
+# Pod settings
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext: {}

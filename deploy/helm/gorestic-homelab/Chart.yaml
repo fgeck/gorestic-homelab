@@ -1,0 +1,17 @@
+apiVersion: v2
+name: gorestic-homelab
+description: A Helm chart for gorestic-homelab - restic backup orchestrator for homelab environments
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - backup
+  - restic
+  - homelab
+  - cronjob
+home: https://github.com/fgeck/gorestic-homelab
+sources:
+  - https://github.com/fgeck/gorestic-homelab
+maintainers:
+  - name: fgeck
+    url: https://github.com/fgeck

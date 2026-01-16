@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "gorestic-homelab.fullname" . }}
+  labels:
+    {{- include "gorestic-homelab.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  timeZone: {{ .Values.timeZone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.job.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+      {{- if .Values.job.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ .Values.job.ttlSecondsAfterFinished }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "gorestic-homelab.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          restartPolicy: OnFailure
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: gorestic
+              image: {{ include "gorestic-homelab.image" . }}
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args: ["run", "--config", "/config/config.yaml"]
+              envFrom:
+                - secretRef:
+                    name: {{ include "gorestic-homelab.secretName" . }}
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                {{- if .Values.persistence.enabled }}
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.sshKey.enabled }}
+                - name: ssh-key
+                  mountPath: /root/.ssh
+                  readOnly: true
+                {{- end }}
+              {{- with .Values.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+          volumes:
+            - name: config
+              configMap:
+                name: {{ include "gorestic-homelab.fullname" . }}-config
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ include "gorestic-homelab.pvcName" . }}
+            {{- end }}
+            {{- if .Values.sshKey.enabled }}
+            - name: ssh-key
+              secret:
+                secretName: {{ include "gorestic-homelab.sshKeySecretName" . }}
+                defaultMode: 0400
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

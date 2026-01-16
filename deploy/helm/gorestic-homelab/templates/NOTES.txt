@@ -1,0 +1,25 @@
+gorestic-homelab has been deployed!
+
+Schedule: {{ .Values.schedule }} ({{ .Values.timeZone }})
+
+To check the CronJob status:
+  kubectl get cronjob {{ include "gorestic-homelab.fullname" . }} -n {{ .Release.Namespace }}
+
+To view recent jobs:
+  kubectl get jobs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To trigger a manual backup:
+  kubectl create job --from=cronjob/{{ include "gorestic-homelab.fullname" . }} manual-backup-$(date +%s) -n {{ .Release.Namespace }}
+
+To view logs from the latest job:
+  kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=backup -n {{ .Release.Namespace }} --tail=100
+
+{{- if not .Values.persistence.enabled }}
+
+WARNING: Persistence is disabled. Make sure to mount your data volume manually.
+{{- end }}
+
+{{- if eq .Values.secrets.resticPassword "changeme" }}
+
+WARNING: You are using the default restic password. Please change it in values.yaml or use --set secrets.resticPassword=<your-password>
+{{- end }}
