@@ -1,0 +1,75 @@
+# gorestic-homelab Configuration Example
+# Copy this file to config.yaml and adjust the values
+
+# Restic repository configuration (required)
+restic:
+  # Repository URL - supports local, rest, s3, b2, sftp, etc.
+  repository: "rest:http://192.168.1.100:8000/backup/"
+
+  # Repository password - can use environment variable
+  password: "${RESTIC_PASSWORD}"
+
+  # Optional: REST server authentication
+  # rest_user: "backup"
+  # rest_password: "${REST_PASSWORD}"
+
+# Backup configuration (required)
+backup:
+  # Paths to back up
+  paths:
+    - /data
+    - /home
+
+  # Optional: Tags for this backup
+  tags:
+    - daily
+    - automated
+
+  # Optional: Override hostname (defaults to system hostname)
+  # host: "myserver"
+
+# Retention policy (optional, defaults shown)
+retention:
+  keep_daily: 7
+  keep_weekly: 4
+  keep_monthly: 6
+
+# Repository check settings (optional)
+check:
+  enabled: true
+  subset: "5%"  # Check 5% of data each run
+
+# Wake-on-LAN configuration (optional)
+# Uncomment to enable WOL before backup
+# wol:
+#   mac_address: "AA:BB:CC:DD:EE:FF"
+#   broadcast_ip: "192.168.1.255"  # defaults to 255.255.255.255
+#   target_url: "http://192.168.1.100:8000"  # URL to poll until ready
+#   timeout: 5m        # max time to wait
+#   poll_interval: 10s # how often to check target
+#   stabilize_wait: 10s # wait after target responds
+
+# PostgreSQL dump configuration (optional)
+# Uncomment to backup PostgreSQL database before restic backup
+# postgres:
+#   host: "192.168.1.100"
+#   port: 5432
+#   database: "myapp"
+#   username: "postgres"
+#   password: "${POSTGRES_PASSWORD}"
+#   format: "custom"  # custom (default), plain, tar
+
+# SSH shutdown configuration (optional)
+# Uncomment to shutdown remote server after backup
+# ssh_shutdown:
+#   host: "192.168.1.100"
+#   port: 22
+#   username: "root"
+#   key_path: "${HOME}/.ssh/id_rsa"
+#   shutdown_delay: 1  # minutes before shutdown
+
+# Telegram notification configuration (optional)
+# Uncomment to receive backup notifications via Telegram
+# telegram:
+#   bot_token: "${TELEGRAM_BOT_TOKEN}"
+#   chat_id: "${TELEGRAM_CHAT_ID}"
