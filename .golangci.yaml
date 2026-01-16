@@ -1,0 +1,109 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - dogsled
+    - dupl
+    - errname
+    - errorlint
+    - exhaustive
+    - copyloopvar
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - goimports
+    - gosec
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    enable-all: true
+    settings:
+      shadow:
+        strict: true
+  gocyclo:
+    min-complexity: 15
+  gocognit:
+    min-complexity: 20
+  dupl:
+    threshold: 100
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  misspell:
+    locale: US
+  nestif:
+    min-complexity: 4
+  godot:
+    scope: declarations
+    capital: false
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unreachable-code
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - gocyclo
+        - gocognit
+    - path: mocks/
+      linters:
+        - dupl
+        - revive
+        - stylecheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+run:
+  timeout: 5m
+  tests: true

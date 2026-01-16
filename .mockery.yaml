@@ -1,0 +1,27 @@
+with-expecter: true
+packages:
+  github.com/fgeck/gorestic-homelab/internal/services/restic:
+    interfaces:
+      Service:
+        config:
+          dir: "{{.InterfaceDir}}/mocks"
+  github.com/fgeck/gorestic-homelab/internal/services/wol:
+    interfaces:
+      Service:
+        config:
+          dir: "{{.InterfaceDir}}/mocks"
+  github.com/fgeck/gorestic-homelab/internal/services/postgres:
+    interfaces:
+      Service:
+        config:
+          dir: "{{.InterfaceDir}}/mocks"
+  github.com/fgeck/gorestic-homelab/internal/services/ssh:
+    interfaces:
+      Service:
+        config:
+          dir: "{{.InterfaceDir}}/mocks"
+  github.com/fgeck/gorestic-homelab/internal/services/telegram:
+    interfaces:
+      Service:
+        config:
+          dir: "{{.InterfaceDir}}/mocks"
