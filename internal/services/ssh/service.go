@@ -1,3 +1,4 @@
+// Package ssh provides SSH operations for remote server management.
 package ssh
 
 import (
@@ -18,60 +19,60 @@ type Service interface {
 	TestConnection(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error)
 }
 
-// SSHClient wraps ssh.Client for mocking.
-type SSHClient interface {
-	NewSession() (SSHSession, error)
+// Client wraps ssh.Client for mocking.
+type Client interface {
+	NewSession() (Session, error)
 	Close() error
 }
 
-// SSHSession wraps ssh.Session for mocking.
-type SSHSession interface {
+// Session wraps ssh.Session for mocking.
+type Session interface {
 	CombinedOutput(cmd string) ([]byte, error)
 	Close() error
 }
 
 // ClientFactory creates SSH clients.
 type ClientFactory interface {
-	NewClient(network, addr string, config *ssh.ClientConfig) (SSHClient, error)
+	NewClient(network, addr string, config *ssh.ClientConfig) (Client, error)
 }
 
 // DefaultClientFactory is the default SSH client factory.
 type DefaultClientFactory struct{}
 
 // NewClient creates a new SSH client.
-func (f *DefaultClientFactory) NewClient(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
+func (f *DefaultClientFactory) NewClient(network, addr string, config *ssh.ClientConfig) (Client, error) {
 	client, err := ssh.Dial(network, addr, config)
 	if err != nil {
 		return nil, err
 	}
-	return &defaultSSHClient{client: client}, nil
+	return &defaultClient{client: client}, nil
 }
 
-type defaultSSHClient struct {
+type defaultClient struct {
 	client *ssh.Client
 }
 
-func (c *defaultSSHClient) NewSession() (SSHSession, error) {
+func (c *defaultClient) NewSession() (Session, error) {
 	session, err := c.client.NewSession()
 	if err != nil {
 		return nil, err
 	}
-	return &defaultSSHSession{session: session}, nil
+	return &defaultSession{session: session}, nil
 }
 
-func (c *defaultSSHClient) Close() error {
+func (c *defaultClient) Close() error {
 	return c.client.Close()
 }
 
-type defaultSSHSession struct {
+type defaultSession struct {
 	session *ssh.Session
 }
 
-func (s *defaultSSHSession) CombinedOutput(cmd string) ([]byte, error) {
+func (s *defaultSession) CombinedOutput(cmd string) ([]byte, error) {
 	return s.session.CombinedOutput(cmd)
 }
 
-func (s *defaultSSHSession) Close() error {
+func (s *defaultSession) Close() error {
 	return s.session.Close()
 }
 
@@ -102,14 +103,15 @@ func (s *Impl) buildConfig(cfg models.SSHShutdownConfig) (*ssh.ClientConfig, err
 	var err error
 
 	// Load private key from file or use provided key
-	if cfg.PrivateKey != nil && len(cfg.PrivateKey) > 0 {
+	switch {
+	case len(cfg.PrivateKey) > 0:
 		key = cfg.PrivateKey
-	} else if cfg.KeyPath != "" {
+	case cfg.KeyPath != "":
 		key, err = os.ReadFile(cfg.KeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read private key from %s: %w", cfg.KeyPath, err)
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("no private key provided")
 	}
 
@@ -149,19 +151,19 @@ func (s *Impl) Shutdown(ctx context.Context, cfg models.SSHShutdownConfig) (*mod
 
 	// Create client with context timeout
 	clientChan := make(chan struct {
-		client SSHClient
+		client Client
 		err    error
 	}, 1)
 
 	go func() {
 		client, err := s.clientFactory.NewClient("tcp", addr, sshConfig)
 		clientChan <- struct {
-			client SSHClient
+			client Client
 			err    error
 		}{client, err}
 	}()
 
-	var client SSHClient
+	var client Client
 	select {
 	case <-ctx.Done():
 		result.Error = ctx.Err()
@@ -173,14 +175,14 @@ func (s *Impl) Shutdown(ctx context.Context, cfg models.SSHShutdownConfig) (*mod
 		}
 		client = res.client
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
 		result.Error = fmt.Errorf("failed to create session: %w", err)
 		return result, nil
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Build shutdown command based on OS
 	var cmd string
@@ -243,19 +245,19 @@ func (s *Impl) TestConnection(ctx context.Context, cfg models.SSHShutdownConfig)
 
 	// Create client with context timeout
 	clientChan := make(chan struct {
-		client SSHClient
+		client Client
 		err    error
 	}, 1)
 
 	go func() {
 		client, err := s.clientFactory.NewClient("tcp", addr, sshConfig)
 		clientChan <- struct {
-			client SSHClient
+			client Client
 			err    error
 		}{client, err}
 	}()
 
-	var client SSHClient
+	var client Client
 	select {
 	case <-ctx.Done():
 		result.Error = ctx.Err()
@@ -267,14 +269,14 @@ func (s *Impl) TestConnection(ctx context.Context, cfg models.SSHShutdownConfig)
 		}
 		client = res.client
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
 		result.Error = fmt.Errorf("failed to create session: %w", err)
 		return result, nil
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Run a simple command to verify connectivity
 	output, err := session.CombinedOutput("echo OK")

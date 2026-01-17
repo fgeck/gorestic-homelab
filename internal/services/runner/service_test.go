@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Mock implementations
+// Mock implementations.
 type mockResticService struct {
 	initFunc      func(ctx context.Context, cfg models.ResticConfig) error
 	snapshotsFunc func(ctx context.Context, cfg models.ResticConfig) ([]models.Snapshot, error)

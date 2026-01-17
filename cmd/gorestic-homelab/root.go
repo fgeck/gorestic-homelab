@@ -54,7 +54,10 @@ func setupLogging() {
 	} else {
 		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "15:04:05"}
 		output.FormatLevel = func(i interface{}) string {
-			return strings.ToUpper(i.(string))
+			if s, ok := i.(string); ok {
+				return strings.ToUpper(s)
+			}
+			return ""
 		}
 		log.Logger = zerolog.New(output).With().Timestamp().Logger()
 	}

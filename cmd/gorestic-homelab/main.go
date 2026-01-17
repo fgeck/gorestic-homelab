@@ -1,3 +1,4 @@
+// Package main is the entry point for gorestic-homelab.
 package main
 
 import (

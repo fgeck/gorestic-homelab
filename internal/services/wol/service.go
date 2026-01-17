@@ -1,3 +1,4 @@
+// Package wol provides Wake-on-LAN operations.
 package wol
 
 import (
@@ -17,8 +18,8 @@ type Service interface {
 	Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error)
 }
 
-// WOLClient wraps the wol library for mocking.
-type WOLClient interface {
+// Client wraps the wol library for mocking.
+type Client interface {
 	Wake(broadcastIP string, mac net.HardwareAddr) error
 }
 
@@ -27,16 +28,16 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// DefaultWOLClient is the default implementation using mdlayher/wol.
-type DefaultWOLClient struct{}
+// DefaultClient is the default implementation using mdlayher/wol.
+type DefaultClient struct{}
 
 // Wake sends a magic packet to the specified MAC address.
-func (c *DefaultWOLClient) Wake(broadcastIP string, mac net.HardwareAddr) error {
+func (c *DefaultClient) Wake(broadcastIP string, mac net.HardwareAddr) error {
 	client, err := wol.NewClient()
 	if err != nil {
 		return fmt.Errorf("failed to create WOL client: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	// Parse broadcast IP
 	ip := net.ParseIP(broadcastIP)
@@ -54,7 +55,7 @@ func (c *DefaultWOLClient) Wake(broadcastIP string, mac net.HardwareAddr) error 
 
 // Impl implements the WOL Service interface.
 type Impl struct {
-	wolClient  WOLClient
+	wolClient  Client
 	httpClient HTTPClient
 	logger     zerolog.Logger
 }
@@ -62,7 +63,7 @@ type Impl struct {
 // New creates a new WOL service.
 func New(logger zerolog.Logger) *Impl {
 	return &Impl{
-		wolClient: &DefaultWOLClient{},
+		wolClient: &DefaultClient{},
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -71,7 +72,7 @@ func New(logger zerolog.Logger) *Impl {
 }
 
 // NewWithClients creates a new WOL service with custom clients (for testing).
-func NewWithClients(logger zerolog.Logger, wolClient WOLClient, httpClient HTTPClient) *Impl {
+func NewWithClients(logger zerolog.Logger, wolClient Client, httpClient HTTPClient) *Impl {
 	return &Impl{
 		wolClient:  wolClient,
 		httpClient: httpClient,
@@ -99,7 +100,7 @@ func (s *Impl) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResul
 	// Send WOL packet
 	if err := s.wolClient.Wake(cfg.BroadcastIP, mac); err != nil {
 		result.Error = err
-		return result, nil
+		return result, nil //nolint:nilerr // error is stored in result struct by design
 	}
 
 	result.PacketSent = true
@@ -121,7 +122,7 @@ func (s *Impl) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResul
 	if err := s.waitForTarget(ctx, cfg); err != nil {
 		result.WaitDuration = time.Since(start)
 		result.Error = err
-		return result, nil
+		return result, nil //nolint:nilerr // error is stored in result struct by design
 	}
 
 	// Wait for stabilization
@@ -168,7 +169,7 @@ func (s *Impl) waitForTarget(ctx context.Context, cfg models.WOLConfig) error {
 
 		resp, err := s.httpClient.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			// Any response means the target is up
 			return nil
 		}

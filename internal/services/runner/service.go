@@ -1,3 +1,4 @@
+// Package runner orchestrates the backup workflow.
 package runner
 
 import (
@@ -67,6 +68,8 @@ func NewWithServices(
 }
 
 // Run executes the complete backup workflow.
+//
+//nolint:gocognit,gocyclo // backup workflow has multiple steps by design
 func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 	startTime := time.Now()
 	var failedStep string
@@ -110,7 +113,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 			runErr = err
 			return err
 		}
-		defer os.Remove(pgDumpPath) // Clean up after backup
+		defer func() { _ = os.Remove(pgDumpPath) }() // Clean up after backup
 	}
 
 	// Step 4: Backup

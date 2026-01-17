@@ -1,3 +1,4 @@
+// Package models contains the data structures used throughout gorestic-homelab.
 package models
 
 // BackupConfig holds the complete configuration for a backup run.

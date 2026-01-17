@@ -1,3 +1,4 @@
+// Package config provides configuration file parsing.
 package config
 
 import (
@@ -42,6 +43,7 @@ func (p *Parser) LoadReader(content string) (*models.BackupConfig, error) {
 	return p.parse()
 }
 
+//nolint:gocognit,gocyclo // parsing config requires checking many fields
 func (p *Parser) parse() (*models.BackupConfig, error) {
 	cfg := &models.BackupConfig{}
 
@@ -102,7 +104,7 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	}
 
 	// Parse optional WOL config.
-	if p.v.IsSet("wol") {
+	if p.v.IsSet("wol") { //nolint:nestif // config parsing with defaults
 		cfg.WOL = &models.WOLConfig{
 			MACAddress:    p.v.GetString("wol.mac_address"),
 			BroadcastIP:   p.v.GetString("wol.broadcast_ip"),
@@ -132,7 +134,7 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	}
 
 	// Parse optional PostgreSQL config.
-	if p.v.IsSet("postgres") {
+	if p.v.IsSet("postgres") { //nolint:nestif // config parsing with defaults
 		cfg.Postgres = &models.PostgresConfig{
 			Host:     p.v.GetString("postgres.host"),
 			Port:     p.v.GetInt("postgres.port"),
@@ -166,7 +168,7 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	}
 
 	// Parse optional SSH shutdown config.
-	if p.v.IsSet("ssh_shutdown") {
+	if p.v.IsSet("ssh_shutdown") { //nolint:nestif // config parsing with defaults
 		cfg.SSHShutdown = &models.SSHShutdownConfig{
 			Host:          p.v.GetString("ssh_shutdown.host"),
 			Port:          p.v.GetInt("ssh_shutdown.port"),

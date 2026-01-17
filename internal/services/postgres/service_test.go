@@ -59,10 +59,7 @@ func TestDump_Success(t *testing.T) {
 			capturedEnv = env
 
 			// Create the output file with some content
-			if err := os.WriteFile(op, []byte("test dump content"), 0o600); err != nil {
-				return err
-			}
-			return nil
+			return os.WriteFile(op, []byte("test dump content"), 0o600)
 		},
 	}
 

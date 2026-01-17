@@ -1,3 +1,4 @@
+// Package restic provides restic backup operations.
 package restic
 
 import (

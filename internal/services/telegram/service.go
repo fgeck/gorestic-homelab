@@ -1,3 +1,4 @@
+// Package telegram provides Telegram notification services.
 package telegram
 
 import (
@@ -96,7 +97,7 @@ func (s *Impl) SendNotification(ctx context.Context, cfg models.TelegramConfig, 
 		result.Error = fmt.Errorf("failed to send request: %w", err)
 		return result, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		result.Error = fmt.Errorf("telegram API returned status %d", resp.StatusCode)

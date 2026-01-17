@@ -1,3 +1,4 @@
+// Package postgres provides PostgreSQL dump operations.
 package postgres
 
 import (
@@ -10,6 +11,12 @@ import (
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
 	"github.com/rs/zerolog"
+)
+
+// PostgreSQL dump format constants.
+const (
+	FormatPlain = "plain"
+	FormatTar   = "tar"
 )
 
 // Service defines the interface for PostgreSQL dump operations.
@@ -30,11 +37,11 @@ func (e *DefaultExecutor) ExecuteWithEnv(ctx context.Context, env []string, outp
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), env...)
 
-	output, err := os.Create(outputPath)
+	output, err := os.Create(outputPath) //nolint:gosec // outputPath is controlled by caller
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer output.Close()
+	defer func() { _ = output.Close() }()
 
 	cmd.Stdout = output
 
@@ -102,9 +109,9 @@ func (s *Impl) Dump(ctx context.Context, cfg models.PostgresConfig, outputPath s
 	switch cfg.Format {
 	case "custom":
 		args = append(args, "-Fc")
-	case "plain":
+	case FormatPlain:
 		args = append(args, "-Fp")
-	case "tar":
+	case FormatTar:
 		args = append(args, "-Ft")
 	default:
 		args = append(args, "-Fc") // Default to custom
@@ -117,12 +124,12 @@ func (s *Impl) Dump(ctx context.Context, cfg models.PostgresConfig, outputPath s
 	}
 
 	// Execute pg_dump
-	if err := s.executor.ExecuteWithEnv(ctx, env, outputPath, "pg_dump", args...); err != nil {
+	if execErr := s.executor.ExecuteWithEnv(ctx, env, outputPath, "pg_dump", args...); execErr != nil {
 		// Clean up partial file
-		os.Remove(outputPath)
-		result.Error = err
+		_ = os.Remove(outputPath)
+		result.Error = execErr
 		result.Duration = time.Since(start)
-		return result, nil
+		return result, nil //nolint:nilerr // error is stored in result struct by design
 	}
 
 	// Get file size
@@ -147,10 +154,10 @@ func GetOutputFilename(cfg models.PostgresConfig) string {
 	ext := "dump"
 
 	switch cfg.Format {
-	case "plain":
+	case FormatPlain:
 		ext = "sql"
-	case "tar":
-		ext = "tar"
+	case FormatTar:
+		ext = FormatTar
 	}
 
 	return fmt.Sprintf("%s-%s.%s", cfg.Database, timestamp, ext)

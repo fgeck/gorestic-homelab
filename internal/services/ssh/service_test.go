@@ -18,39 +18,39 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Mock implementations
-type mockSSHSession struct {
+// Mock implementations.
+type mockSession struct {
 	combinedOutputFunc func(cmd string) ([]byte, error)
 	closeFunc          func() error
 }
 
-func (m *mockSSHSession) CombinedOutput(cmd string) ([]byte, error) {
+func (m *mockSession) CombinedOutput(cmd string) ([]byte, error) {
 	if m.combinedOutputFunc != nil {
 		return m.combinedOutputFunc(cmd)
 	}
 	return []byte(""), nil
 }
 
-func (m *mockSSHSession) Close() error {
+func (m *mockSession) Close() error {
 	if m.closeFunc != nil {
 		return m.closeFunc()
 	}
 	return nil
 }
 
-type mockSSHClient struct {
-	newSessionFunc func() (SSHSession, error)
+type mockClient struct {
+	newSessionFunc func() (Session, error)
 	closeFunc      func() error
 }
 
-func (m *mockSSHClient) NewSession() (SSHSession, error) {
+func (m *mockClient) NewSession() (Session, error) {
 	if m.newSessionFunc != nil {
 		return m.newSessionFunc()
 	}
-	return &mockSSHSession{}, nil
+	return &mockSession{}, nil
 }
 
-func (m *mockSSHClient) Close() error {
+func (m *mockClient) Close() error {
 	if m.closeFunc != nil {
 		return m.closeFunc()
 	}
@@ -58,14 +58,14 @@ func (m *mockSSHClient) Close() error {
 }
 
 type mockClientFactory struct {
-	newClientFunc func(network, addr string, config *ssh.ClientConfig) (SSHClient, error)
+	newClientFunc func(network, addr string, config *ssh.ClientConfig) (Client, error)
 }
 
-func (m *mockClientFactory) NewClient(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
+func (m *mockClientFactory) NewClient(network, addr string, config *ssh.ClientConfig) (Client, error) {
 	if m.newClientFunc != nil {
 		return m.newClientFunc(network, addr, config)
 	}
-	return &mockSSHClient{}, nil
+	return &mockClient{}, nil
 }
 
 func testLogger() zerolog.Logger {
@@ -101,10 +101,10 @@ func TestShutdown_Success(t *testing.T) {
 	var capturedCommand string
 
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
-			return &mockSSHClient{
-				newSessionFunc: func() (SSHSession, error) {
-					return &mockSSHSession{
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
+			return &mockClient{
+				newSessionFunc: func() (Session, error) {
+					return &mockSession{
 						combinedOutputFunc: func(cmd string) ([]byte, error) {
 							capturedCommand = cmd
 							return []byte("Shutdown scheduled"), nil
@@ -131,10 +131,10 @@ func TestShutdown_ImmediateShutdown(t *testing.T) {
 	var capturedCommand string
 
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
-			return &mockSSHClient{
-				newSessionFunc: func() (SSHSession, error) {
-					return &mockSSHSession{
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
+			return &mockClient{
+				newSessionFunc: func() (Session, error) {
+					return &mockSession{
 						combinedOutputFunc: func(cmd string) ([]byte, error) {
 							capturedCommand = cmd
 							return []byte(""), nil
@@ -158,7 +158,7 @@ func TestShutdown_ImmediateShutdown(t *testing.T) {
 
 func TestShutdown_ConnectionFailed(t *testing.T) {
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
 			return nil, errors.New("connection refused")
 		},
 	}
@@ -174,9 +174,9 @@ func TestShutdown_ConnectionFailed(t *testing.T) {
 
 func TestShutdown_SessionFailed(t *testing.T) {
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
-			return &mockSSHClient{
-				newSessionFunc: func() (SSHSession, error) {
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
+			return &mockClient{
+				newSessionFunc: func() (Session, error) {
 					return nil, errors.New("session creation failed")
 				},
 			}, nil
@@ -228,10 +228,10 @@ func TestShutdown_InvalidPrivateKey(t *testing.T) {
 
 func TestShutdown_ContextCancelled(t *testing.T) {
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
 			// Simulate slow connection
 			time.Sleep(100 * time.Millisecond)
-			return &mockSSHClient{}, nil
+			return &mockClient{}, nil
 		},
 	}
 
@@ -250,10 +250,10 @@ func TestShutdown_ContextCancelled(t *testing.T) {
 
 func TestTestConnection_Success(t *testing.T) {
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
-			return &mockSSHClient{
-				newSessionFunc: func() (SSHSession, error) {
-					return &mockSSHSession{
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
+			return &mockClient{
+				newSessionFunc: func() (Session, error) {
+					return &mockSession{
 						combinedOutputFunc: func(cmd string) ([]byte, error) {
 							if cmd == "echo OK" {
 								return []byte("OK\n"), nil
@@ -277,7 +277,7 @@ func TestTestConnection_Success(t *testing.T) {
 
 func TestTestConnection_Failed(t *testing.T) {
 	factory := &mockClientFactory{
-		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (SSHClient, error) {
+		newClientFunc: func(network, addr string, config *ssh.ClientConfig) (Client, error) {
 			return nil, errors.New("connection refused")
 		},
 	}

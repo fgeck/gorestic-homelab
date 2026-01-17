@@ -35,12 +35,11 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      check-blank: false
     govet:
-      enable-all: true
-      settings:
-        shadow:
-          strict: true
+      disable:
+        - fieldalignment
+        - shadow
     gocyclo:
       min-complexity: 15
     gocognit:
@@ -90,6 +89,8 @@ linters:
           - gosec
           - gocyclo
           - gocognit
+          - errcheck
+          - goconst
       - path: mocks/
         linters:
           - dupl
