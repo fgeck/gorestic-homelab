@@ -128,7 +128,7 @@ postgres:
 wol:
   mac_address: "AA:BB:CC:DD:EE:FF"
   broadcast_ip: "192.168.1.255"
-  target_url: "http://192.168.1.100:8000"
+  poll_url: "http://192.168.1.100:8000"  # URL to poll until target is ready
   timeout: 5m
   poll_interval: 10s
   stabilize_wait: 10s

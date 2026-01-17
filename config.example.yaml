@@ -44,9 +44,9 @@ check:
 # wol:
 #   mac_address: "AA:BB:CC:DD:EE:FF"
 #   broadcast_ip: "192.168.1.255"  # defaults to 255.255.255.255
-#   target_url: "http://192.168.1.100:8000"  # URL to poll until ready
+#   poll_url: "http://192.168.1.100:8000"  # URL to poll until target is ready
 #   timeout: 5m        # max time to wait
-#   poll_interval: 10s # how often to check target
+#   poll_interval: 10s # how often to check poll_url
 #   stabilize_wait: 10s # wait after target responds
 
 # PostgreSQL dump configuration (optional)
@@ -67,6 +67,7 @@ check:
 #   username: "root"
 #   key_path: "${HOME}/.ssh/id_rsa"
 #   shutdown_delay: 1  # minutes before shutdown
+#   os: "linux"        # linux (default) or windows
 
 # Telegram notification configuration (optional)
 # Uncomment to receive backup notifications via Telegram

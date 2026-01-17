@@ -61,7 +61,7 @@ check:
 wol:
   mac_address: "AA:BB:CC:DD:EE:FF"
   broadcast_ip: "192.168.1.255"
-  target_url: "http://192.168.1.100:8000"
+  poll_url: "http://192.168.1.100:8000"
   timeout: 10m
   poll_interval: 5s
   stabilize_wait: 15s
@@ -114,7 +114,7 @@ telegram:
 	require.NotNil(t, cfg.WOL)
 	assert.Equal(t, "AA:BB:CC:DD:EE:FF", cfg.WOL.MACAddress)
 	assert.Equal(t, "192.168.1.255", cfg.WOL.BroadcastIP)
-	assert.Equal(t, "http://192.168.1.100:8000", cfg.WOL.TargetURL)
+	assert.Equal(t, "http://192.168.1.100:8000", cfg.WOL.PollURL)
 	assert.Equal(t, 10*time.Minute, cfg.WOL.Timeout)
 	assert.Equal(t, 5*time.Second, cfg.WOL.PollInterval)
 	assert.Equal(t, 15*time.Second, cfg.WOL.StabilizeWait)
@@ -248,6 +248,26 @@ wol:
 	assert.Equal(t, 5*time.Minute, cfg.WOL.Timeout)
 	assert.Equal(t, 10*time.Second, cfg.WOL.PollInterval)
 	assert.Equal(t, 10*time.Second, cfg.WOL.StabilizeWait)
+}
+
+func TestParser_LoadReader_WOL_WithPollURL(t *testing.T) {
+	yaml := `
+restic:
+  repository: "rest:http://192.168.1.100:8000/backup/"
+  password: "secret"
+backup:
+  paths:
+    - /data
+wol:
+  mac_address: "AA:BB:CC:DD:EE:FF"
+  poll_url: "http://192.168.1.100:8000"
+`
+	parser := NewParser()
+	cfg, err := parser.LoadReader(yaml)
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg.WOL)
+	assert.Equal(t, "http://192.168.1.100:8000", cfg.WOL.PollURL)
 }
 
 func TestParser_LoadReader_Postgres_MissingDatabase(t *testing.T) {

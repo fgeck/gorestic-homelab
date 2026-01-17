@@ -130,7 +130,7 @@ func TestWake_WithTargetURL_ImmediateSuccess(t *testing.T) {
 	cfg := models.WOLConfig{
 		MACAddress:    "AA:BB:CC:DD:EE:FF",
 		BroadcastIP:   "192.168.1.255",
-		TargetURL:     "http://192.168.1.100:8000",
+		PollURL:       "http://192.168.1.100:8000",
 		Timeout:       10 * time.Second,
 		PollInterval:  1 * time.Second,
 		StabilizeWait: 0,
@@ -166,7 +166,7 @@ func TestWake_WithTargetURL_DelayedSuccess(t *testing.T) {
 	cfg := models.WOLConfig{
 		MACAddress:    "AA:BB:CC:DD:EE:FF",
 		BroadcastIP:   "192.168.1.255",
-		TargetURL:     "http://192.168.1.100:8000",
+		PollURL:       "http://192.168.1.100:8000",
 		Timeout:       10 * time.Second,
 		PollInterval:  10 * time.Millisecond,
 		StabilizeWait: 0,
@@ -194,7 +194,7 @@ func TestWake_WithTargetURL_Timeout(t *testing.T) {
 	cfg := models.WOLConfig{
 		MACAddress:    "AA:BB:CC:DD:EE:FF",
 		BroadcastIP:   "192.168.1.255",
-		TargetURL:     "http://192.168.1.100:8000",
+		PollURL:       "http://192.168.1.100:8000",
 		Timeout:       50 * time.Millisecond,
 		PollInterval:  10 * time.Millisecond,
 		StabilizeWait: 0,
@@ -224,7 +224,7 @@ func TestWake_ContextCancelled(t *testing.T) {
 	cfg := models.WOLConfig{
 		MACAddress:    "AA:BB:CC:DD:EE:FF",
 		BroadcastIP:   "192.168.1.255",
-		TargetURL:     "http://192.168.1.100:8000",
+		PollURL:       "http://192.168.1.100:8000",
 		Timeout:       10 * time.Second,
 		PollInterval:  100 * time.Millisecond,
 		StabilizeWait: 0,
@@ -255,7 +255,7 @@ func TestWake_WithStabilizeWait(t *testing.T) {
 	cfg := models.WOLConfig{
 		MACAddress:    "AA:BB:CC:DD:EE:FF",
 		BroadcastIP:   "192.168.1.255",
-		TargetURL:     "http://192.168.1.100:8000",
+		PollURL:       "http://192.168.1.100:8000",
 		Timeout:       10 * time.Second,
 		PollInterval:  10 * time.Millisecond,
 		StabilizeWait: stabilizeWait,

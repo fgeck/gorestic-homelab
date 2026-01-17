@@ -107,7 +107,7 @@ func (s *Impl) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResul
 	s.logger.Info().Msg("WOL packet sent successfully")
 
 	// If no target URL specified, we're done
-	if cfg.TargetURL == "" {
+	if cfg.PollURL == "" {
 		result.WaitDuration = time.Since(start)
 		result.TargetReady = true
 		return result, nil
@@ -115,7 +115,7 @@ func (s *Impl) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResul
 
 	// Wait for target to become available
 	s.logger.Info().
-		Str("url", cfg.TargetURL).
+		Str("url", cfg.PollURL).
 		Dur("timeout", cfg.Timeout).
 		Msg("waiting for target to become available")
 
@@ -158,11 +158,11 @@ func (s *Impl) waitForTarget(ctx context.Context, cfg models.WOLConfig) error {
 		}
 
 		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for target at %s", cfg.TargetURL)
+			return fmt.Errorf("timeout waiting for target at %s", cfg.PollURL)
 		}
 
 		// Try to connect to target
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.TargetURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.PollURL, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}

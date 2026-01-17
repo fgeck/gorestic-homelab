@@ -205,7 +205,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 func (s *Impl) runWOL(ctx context.Context, cfg *models.WOLConfig) error {
 	s.logger.Info().
 		Str("mac", cfg.MACAddress).
-		Str("target", cfg.TargetURL).
+		Str("target", cfg.PollURL).
 		Msg("sending Wake-on-LAN packet")
 
 	result, err := s.wolSvc.Wake(ctx, *cfg)
@@ -216,7 +216,7 @@ func (s *Impl) runWOL(ctx context.Context, cfg *models.WOLConfig) error {
 		return fmt.Errorf("WOL failed: %w", result.Error)
 	}
 
-	if !result.TargetReady && cfg.TargetURL != "" {
+	if !result.TargetReady && cfg.PollURL != "" {
 		return fmt.Errorf("target did not become ready after WOL")
 	}
 

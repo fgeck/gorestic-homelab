@@ -108,7 +108,7 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 		cfg.WOL = &models.WOLConfig{
 			MACAddress:    p.v.GetString("wol.mac_address"),
 			BroadcastIP:   p.v.GetString("wol.broadcast_ip"),
-			TargetURL:     p.v.GetString("wol.target_url"),
+			PollURL:       p.v.GetString("wol.poll_url"),
 			Timeout:       p.v.GetDuration("wol.timeout"),
 			PollInterval:  p.v.GetDuration("wol.poll_interval"),
 			StabilizeWait: p.v.GetDuration("wol.stabilize_wait"),

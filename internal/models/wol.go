@@ -6,9 +6,9 @@ import "time"
 type WOLConfig struct {
 	MACAddress    string
 	BroadcastIP   string
-	TargetURL     string        // URL to poll until ready
+	PollURL       string        // URL to poll until target machine is ready
 	Timeout       time.Duration // max time to wait for target
-	PollInterval  time.Duration // how often to poll target URL
+	PollInterval  time.Duration // how often to poll the URL
 	StabilizeWait time.Duration // wait after target responds
 }
 

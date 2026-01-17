@@ -68,8 +68,8 @@ func validateConfig(cmd *cobra.Command, args []string) error {
 		fmt.Println("WOL Configuration:")
 		fmt.Printf("  MAC Address: %s\n", cfg.WOL.MACAddress)
 		fmt.Printf("  Broadcast IP: %s\n", cfg.WOL.BroadcastIP)
-		if cfg.WOL.TargetURL != "" {
-			fmt.Printf("  Target URL: %s\n", cfg.WOL.TargetURL)
+		if cfg.WOL.PollURL != "" {
+			fmt.Printf("  Poll URL: %s\n", cfg.WOL.PollURL)
 		}
 	}
 
