@@ -1,0 +1,54 @@
+#!/bin/bash
+# Pre-push hook for gorestic-homelab
+# Automatically fixes go mod tidy, fmt, vet issues and amends commit
+# Only aborts on lint errors
+
+set -e
+
+echo "Running pre-push checks..."
+
+# Get the root directory of the git repository
+ROOT_DIR=$(git rev-parse --show-toplevel)
+cd "$ROOT_DIR"
+
+# Track if we need to amend
+NEEDS_AMEND=false
+
+echo "==> Running go mod tidy..."
+make deps-tidy
+if ! git diff --quiet go.mod go.sum 2>/dev/null; then
+    echo "    go.mod/go.sum changed, staging changes..."
+    git add go.mod go.sum
+    NEEDS_AMEND=true
+fi
+
+echo "==> Running go fmt..."
+make fmt
+if ! git diff --quiet 2>/dev/null; then
+    echo "    Code formatted, staging changes..."
+    git add -u
+    NEEDS_AMEND=true
+fi
+
+echo "==> Running go vet..."
+make vet
+
+echo "==> Running golangci-lint..."
+if ! make lint; then
+    echo ""
+    echo "ERROR: Lint errors found. Please fix them before pushing."
+    exit 1
+fi
+
+# Amend commit if there were changes
+if [ "$NEEDS_AMEND" = true ]; then
+    echo ""
+    echo "==> Amending commit with auto-fixes..."
+    git commit --amend --no-edit --no-verify
+    echo ""
+    echo "Commit amended with auto-fixes. Please run 'git push' again."
+    exit 1
+fi
+
+echo ""
+echo "All pre-push checks passed!"

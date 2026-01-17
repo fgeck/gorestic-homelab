@@ -18,7 +18,7 @@ LDFLAGS=-ldflags "-s -w"
 TEST_FLAGS=-v -race
 COVERAGE_FILE=coverage.out
 
-.PHONY: all build clean test test-unit test-integration test-e2e test-all lint fmt vet deps help
+.PHONY: all build clean test test-unit test-integration test-e2e test-all lint fmt vet deps help install-hooks
 
 ## help: Show this help message
 help:
@@ -106,3 +106,10 @@ docker-build:
 ## mockery: Generate mocks
 mockery:
 	mockery
+
+## install-hooks: Install git hooks
+install-hooks:
+	@echo "Installing git hooks..."
+	@cp scripts/pre-push .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "Git hooks installed successfully"
