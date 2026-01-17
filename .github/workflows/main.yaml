@@ -10,31 +10,9 @@ env:
   GO_VERSION: "1.23"
 
 jobs:
-  setup:
-    name: Setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
-    needs: setup
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +20,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Check formatting
         run: make fmt-check
@@ -57,7 +36,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: setup
     steps:
       - uses: actions/checkout@v4
 
@@ -65,6 +43,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Build
         run: make build
@@ -80,6 +59,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
 
       - name: Run unit tests
         run: make test-unit-cover
@@ -109,16 +89,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      restic-rest:
-        image: restic/rest-server:latest
-        ports:
-          - 8000:8000
-        options: >-
-          --health-cmd "wget -q --spider http://localhost:8000/ || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
 
@@ -126,6 +96,28 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install PostgreSQL client and restic
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client restic
+
+      - name: Start restic-rest-server with auth
+        run: |
+          docker run -d --name restic-rest \
+            -p 8000:8000 \
+            -v ${{ github.workspace }}/scripts/htpasswd:/data/.htpasswd:ro \
+            restic/rest-server:latest
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if wget -q --spider http://localhost:8000/ 2>/dev/null; then
+              echo "restic-rest-server is ready"
+              break
+            fi
+            echo "Waiting for restic-rest-server..."
+            sleep 1
+          done
 
       - name: Run integration tests
         env:
@@ -136,7 +128,13 @@ jobs:
           TEST_POSTGRES_DB: testdb
           TEST_RESTIC_REPO: rest:http://localhost:8000/test
           TEST_RESTIC_PASSWORD: testpassword
+          TEST_RESTIC_REST_USER: test
+          TEST_RESTIC_REST_PASSWORD: testpassword
         run: make test-integration
+
+      - name: Stop restic-rest-server
+        if: always()
+        run: docker stop restic-rest && docker rm restic-rest
 
   docker:
     name: Build and Push Docker

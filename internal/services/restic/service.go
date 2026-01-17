@@ -239,6 +239,29 @@ type forgetGroup struct {
 	Remove []snapshotJSON `json:"remove"`
 }
 
+// extractJSONArray finds and extracts a JSON array from output that may contain
+// additional non-JSON text (like restic's prune summary).
+func extractJSONArray(output []byte) []byte {
+	idx := bytes.Index(output, []byte("["))
+	if idx < 0 {
+		return output
+	}
+
+	depth := 0
+	for i := idx; i < len(output); i++ {
+		switch output[i] {
+		case '[':
+			depth++
+		case ']':
+			depth--
+			if depth == 0 {
+				return output[idx : i+1]
+			}
+		}
+	}
+	return output
+}
+
 // Forget removes old snapshots according to the retention policy.
 func (s *Impl) Forget(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error) {
 	s.logger.Info().
@@ -271,9 +294,10 @@ func (s *Impl) Forget(ctx context.Context, cfg models.ResticConfig, policy model
 	}
 
 	// Parse output to count kept/removed snapshots
+	// Output contains JSON array followed by non-JSON prune summary text
 	var groups []forgetGroup
-	if err := json.Unmarshal(output, &groups); err != nil {
-		// If the output is empty or not valid JSON, that's okay
+	jsonData := extractJSONArray(output)
+	if err := json.Unmarshal(jsonData, &groups); err != nil {
 		s.logger.Debug().Err(err).Msg("could not parse forget output")
 	}
 

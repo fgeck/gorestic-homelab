@@ -18,7 +18,7 @@ LDFLAGS=-ldflags "-s -w"
 TEST_FLAGS=-v -race
 COVERAGE_FILE=coverage.out
 
-.PHONY: all build clean test test-unit test-integration test-e2e test-all lint fmt vet deps help install-hooks
+.PHONY: all build clean test test-unit test-integration test-e2e test-all lint fmt vet deps help install-hooks integration-up integration-down integration-local integration-ci
 
 ## help: Show this help message
 help:
@@ -113,3 +113,31 @@ install-hooks:
 	@cp scripts/pre-push .git/hooks/pre-push
 	@chmod +x .git/hooks/pre-push
 	@echo "Git hooks installed successfully"
+
+## integration-up: Start integration test services (postgres, restic-rest)
+integration-up:
+	docker compose -f docker-compose.integration.yaml up -d
+	@echo "Waiting for services to be healthy..."
+	@sleep 5
+
+## integration-down: Stop integration test services
+integration-down:
+	docker compose -f docker-compose.integration.yaml down -v
+
+## integration-local: Run integration tests locally with docker services
+integration-local: integration-up
+	TEST_POSTGRES_HOST=localhost \
+	TEST_POSTGRES_PORT=15432 \
+	TEST_POSTGRES_USER=test \
+	TEST_POSTGRES_PASSWORD=test \
+	TEST_POSTGRES_DB=testdb \
+	TEST_RESTIC_REPO=rest:http://localhost:18000/test \
+	TEST_RESTIC_PASSWORD=testpassword \
+	TEST_RESTIC_REST_USER=test \
+	TEST_RESTIC_REST_PASSWORD=testpassword \
+	$(GOTEST) $(TEST_FLAGS) -tags=integration ./integration/...
+	$(MAKE) integration-down
+
+## integration-ci: Run integration tests in CI (requires pg_dump 16 and services on standard ports)
+integration-ci:
+	$(GOTEST) $(TEST_FLAGS) -tags=integration ./integration/...

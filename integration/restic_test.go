@@ -28,8 +28,10 @@ func getResticConfig(t *testing.T) models.ResticConfig {
 	}
 
 	return models.ResticConfig{
-		Repository: repo,
-		Password:   password,
+		Repository:   repo,
+		Password:     password,
+		RestUser:     os.Getenv("TEST_RESTIC_REST_USER"),
+		RestPassword: os.Getenv("TEST_RESTIC_REST_PASSWORD"),
 	}
 }
 
