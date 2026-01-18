@@ -106,9 +106,9 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	// Parse optional WOL config.
 	if p.v.IsSet("wol") { //nolint:nestif // config parsing with defaults
 		cfg.WOL = &models.WOLConfig{
-			MACAddress:    p.v.GetString("wol.mac_address"),
-			BroadcastIP:   p.v.GetString("wol.broadcast_ip"),
-			PollURL:       p.v.GetString("wol.poll_url"),
+			MACAddress:    p.expandEnv(p.v.GetString("wol.mac_address")),
+			BroadcastIP:   p.expandEnv(p.v.GetString("wol.broadcast_ip")),
+			PollURL:       p.expandEnv(p.v.GetString("wol.poll_url")),
 			Timeout:       p.v.GetDuration("wol.timeout"),
 			PollInterval:  p.v.GetDuration("wol.poll_interval"),
 			StabilizeWait: p.v.GetDuration("wol.stabilize_wait"),
@@ -136,10 +136,10 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	// Parse optional PostgreSQL config.
 	if p.v.IsSet("postgres") { //nolint:nestif // config parsing with defaults
 		cfg.Postgres = &models.PostgresConfig{
-			Host:     p.v.GetString("postgres.host"),
+			Host:     p.expandEnv(p.v.GetString("postgres.host")),
 			Port:     p.v.GetInt("postgres.port"),
-			Database: p.v.GetString("postgres.database"),
-			Username: p.v.GetString("postgres.username"),
+			Database: p.expandEnv(p.v.GetString("postgres.database")),
+			Username: p.expandEnv(p.v.GetString("postgres.username")),
 			Password: p.expandEnv(p.v.GetString("postgres.password")),
 			Format:   p.v.GetString("postgres.format"),
 		}
@@ -170,9 +170,9 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	// Parse optional SSH shutdown config.
 	if p.v.IsSet("ssh_shutdown") { //nolint:nestif // config parsing with defaults
 		cfg.SSHShutdown = &models.SSHShutdownConfig{
-			Host:          p.v.GetString("ssh_shutdown.host"),
+			Host:          p.expandEnv(p.v.GetString("ssh_shutdown.host")),
 			Port:          p.v.GetInt("ssh_shutdown.port"),
-			Username:      p.v.GetString("ssh_shutdown.username"),
+			Username:      p.expandEnv(p.v.GetString("ssh_shutdown.username")),
 			KeyPath:       p.expandEnv(p.v.GetString("ssh_shutdown.key_path")),
 			ShutdownDelay: p.v.GetInt("ssh_shutdown.shutdown_delay"),
 			OS:            p.v.GetString("ssh_shutdown.os"),
