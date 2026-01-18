@@ -165,13 +165,6 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	// Store backup stats for notification (even if later steps fail)
 	backupStats = backupResult
 
-	s.logger.Info().
-		Str("snapshot_id", backupResult.SnapshotID).
-		Int("files_new", backupResult.FilesNew).
-		Int("files_changed", backupResult.FilesChanged).
-		Int64("data_added", backupResult.DataAdded).
-		Msg("backup completed")
-
 	// Step 5: Apply retention policy
 	failedStep = "forget"
 	forgetResult, err := s.resticSvc.Forget(ctx, cfg.Restic, cfg.Retention)
@@ -186,11 +179,6 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 
 	// Store forget stats for notification
 	forgetStats = forgetResult
-
-	s.logger.Info().
-		Int("kept", forgetResult.SnapshotsKept).
-		Int("removed", forgetResult.SnapshotsRemoved).
-		Msg("retention policy applied")
 
 	// Step 6: Repository check (if enabled)
 	if cfg.Check.Enabled {
@@ -208,11 +196,6 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 			returnErr = fmt.Errorf("repository check failed")
 			return returnErr
 		}
-
-		s.logger.Info().
-			Bool("passed", checkResult.Passed).
-			Dur("duration", checkResult.Duration).
-			Msg("repository check completed")
 	}
 
 	// Success - clear failedStep
@@ -225,11 +208,6 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 }
 
 func (s *Impl) runWOL(ctx context.Context, cfg *models.WOLConfig) error {
-	s.logger.Info().
-		Str("mac", cfg.MACAddress).
-		Str("target", cfg.PollURL).
-		Msg("sending Wake-on-LAN packet")
-
 	result, err := s.wolSvc.Wake(ctx, *cfg)
 	if err != nil {
 		return fmt.Errorf("WOL failed: %w", err)
@@ -242,22 +220,11 @@ func (s *Impl) runWOL(ctx context.Context, cfg *models.WOLConfig) error {
 		return fmt.Errorf("target did not become ready after WOL")
 	}
 
-	s.logger.Info().
-		Bool("packet_sent", result.PacketSent).
-		Bool("target_ready", result.TargetReady).
-		Dur("wait_duration", result.WaitDuration).
-		Msg("WOL completed")
-
 	return nil
 }
 
 func (s *Impl) runPostgresDump(ctx context.Context, cfg *models.PostgresConfig) (string, error) {
 	outputPath := filepath.Join(s.tempDir, postgres.GetOutputFilename(*cfg))
-
-	s.logger.Info().
-		Str("database", cfg.Database).
-		Str("output", outputPath).
-		Msg("starting PostgreSQL dump")
 
 	result, err := s.postgresSvc.Dump(ctx, *cfg, outputPath)
 	if err != nil {
@@ -267,21 +234,10 @@ func (s *Impl) runPostgresDump(ctx context.Context, cfg *models.PostgresConfig) 
 		return "", fmt.Errorf("PostgreSQL dump failed: %w", result.Error)
 	}
 
-	s.logger.Info().
-		Str("output", result.OutputPath).
-		Int64("size", result.SizeBytes).
-		Dur("duration", result.Duration).
-		Msg("PostgreSQL dump completed")
-
 	return result.OutputPath, nil
 }
 
 func (s *Impl) runSSHShutdown(ctx context.Context, cfg *models.SSHShutdownConfig) error {
-	s.logger.Info().
-		Str("host", cfg.Host).
-		Int("delay", cfg.ShutdownDelay).
-		Msg("initiating remote shutdown")
-
 	// Load private key if needed
 	if cfg.PrivateKey == nil && cfg.KeyPath != "" {
 		key, err := os.ReadFile(cfg.KeyPath)
@@ -301,16 +257,7 @@ func (s *Impl) runSSHShutdown(ctx context.Context, cfg *models.SSHShutdownConfig
 		if !result.CommandRun {
 			return fmt.Errorf("SSH shutdown failed: %w", result.Error)
 		}
-		s.logger.Warn().
-			Err(result.Error).
-			Str("output", result.Output).
-			Msg("shutdown command returned error (may be expected)")
 	}
-
-	s.logger.Info().
-		Bool("command_run", result.CommandRun).
-		Str("output", result.Output).
-		Msg("SSH shutdown command sent")
 
 	return nil
 }
@@ -362,8 +309,5 @@ func (s *Impl) sendNotificationWithStats(
 	}
 	if result.Error != nil {
 		s.logger.Error().Err(result.Error).Msg("failed to send Telegram notification")
-		return
 	}
-
-	s.logger.Info().Msg("Telegram notification sent")
 }
