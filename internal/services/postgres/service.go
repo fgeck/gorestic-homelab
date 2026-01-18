@@ -2,11 +2,13 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
@@ -43,9 +45,15 @@ func (e *DefaultExecutor) ExecuteWithEnv(ctx context.Context, env []string, outp
 	}
 	defer func() { _ = output.Close() }()
 
+	var stderr bytes.Buffer
 	cmd.Stdout = output
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg != "" {
+			return fmt.Errorf("pg_dump failed: %w: %s", err, errMsg)
+		}
 		return fmt.Errorf("pg_dump failed: %w", err)
 	}
 
