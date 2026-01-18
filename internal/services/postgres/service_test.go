@@ -235,3 +235,48 @@ func TestGetOutputFilename(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultExecutor_CapturesStderr(t *testing.T) {
+	// Test that DefaultExecutor captures stderr from failed commands
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "output.txt")
+
+	executor := &DefaultExecutor{}
+
+	// Use a command that writes to stderr and fails
+	// "sh -c" allows us to write to stderr and exit with error
+	err := executor.ExecuteWithEnv(
+		context.Background(),
+		nil,
+		outputPath,
+		"sh",
+		"-c", "echo 'error message' >&2 && exit 1",
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pg_dump failed")
+	assert.Contains(t, err.Error(), "error message")
+}
+
+func TestDefaultExecutor_SuccessNoStderr(t *testing.T) {
+	// Test that DefaultExecutor succeeds when command succeeds
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "output.txt")
+
+	executor := &DefaultExecutor{}
+
+	err := executor.ExecuteWithEnv(
+		context.Background(),
+		nil,
+		outputPath,
+		"sh",
+		"-c", "echo 'success output'",
+	)
+
+	require.NoError(t, err)
+
+	// Verify output was written to file
+	content, readErr := os.ReadFile(outputPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "success output")
+}

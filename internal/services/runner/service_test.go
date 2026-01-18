@@ -426,8 +426,10 @@ func TestRun_WithSSHShutdown(t *testing.T) {
 }
 
 func TestRun_SSHShutdownFailure(t *testing.T) {
+	sshCalled := false
 	sshSvc := &mockSSHService{
 		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
+			sshCalled = true
 			return &models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil
 		},
 	}
@@ -450,8 +452,98 @@ func TestRun_SSHShutdownFailure(t *testing.T) {
 
 	err := runner.Run(context.Background(), cfg)
 
+	// SSH shutdown runs in defer, failure is returned even if backup succeeded
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH shutdown failed")
+	assert.True(t, sshCalled)
+}
+
+func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
+	// When WOL succeeds but backup fails, SSH shutdown should still run
+	sshCalled := false
+	sshSvc := &mockSSHService{
+		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
+			sshCalled = true
+			return &models.SSHResult{CommandRun: true}, nil
+		},
+	}
+
+	resticSvc := &mockResticService{
+		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
+			return &models.BackupResult{Error: errors.New("backup failed")}, nil
+		},
+	}
+
+	runner := NewWithServices(
+		testLogger(),
+		resticSvc,
+		&mockWOLService{},
+		&mockPostgresService{},
+		sshSvc,
+		&mockTelegramService{},
+		t.TempDir(),
+	)
+
+	cfg := minimalConfig()
+	cfg.WOL = &models.WOLConfig{
+		MACAddress:  "00:11:22:33:44:55",
+		BroadcastIP: "255.255.255.255",
+	}
+	cfg.SSHShutdown = &models.SSHShutdownConfig{
+		Host:       "192.168.1.100",
+		PrivateKey: []byte("test-key"),
+	}
+
+	err := runner.Run(context.Background(), cfg)
+
+	// Backup failed, but SSH shutdown should still have been called
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "backup failed")
+	assert.True(t, sshCalled, "SSH shutdown should run even when backup fails")
+}
+
+func TestRun_SSHShutdownSkippedWhenWOLFails(t *testing.T) {
+	// When WOL fails, SSH shutdown should NOT run (machine wasn't woken up)
+	sshCalled := false
+	sshSvc := &mockSSHService{
+		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
+			sshCalled = true
+			return &models.SSHResult{CommandRun: true}, nil
+		},
+	}
+
+	wolSvc := &mockWOLService{
+		wakeFunc: func(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error) {
+			return &models.WOLResult{Error: errors.New("WOL failed")}, nil
+		},
+	}
+
+	runner := NewWithServices(
+		testLogger(),
+		&mockResticService{},
+		wolSvc,
+		&mockPostgresService{},
+		sshSvc,
+		&mockTelegramService{},
+		t.TempDir(),
+	)
+
+	cfg := minimalConfig()
+	cfg.WOL = &models.WOLConfig{
+		MACAddress:  "00:11:22:33:44:55",
+		BroadcastIP: "255.255.255.255",
+	}
+	cfg.SSHShutdown = &models.SSHShutdownConfig{
+		Host:       "192.168.1.100",
+		PrivateKey: []byte("test-key"),
+	}
+
+	err := runner.Run(context.Background(), cfg)
+
+	// WOL failed, SSH shutdown should NOT be called
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "WOL failed")
+	assert.False(t, sshCalled, "SSH shutdown should NOT run when WOL fails")
 }
 
 func TestRun_WithTelegram_Success(t *testing.T) {
@@ -554,4 +646,173 @@ func TestRun_ContextCancelled(t *testing.T) {
 	err := runner.Run(ctx, minimalConfig())
 
 	assert.Error(t, err)
+}
+
+func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
+	// When backup succeeds but SSH shutdown fails, Telegram should include backup stats
+	var capturedMsg models.TelegramMessage
+	telegramSvc := &mockTelegramService{
+		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
+			capturedMsg = msg
+			return &models.TelegramResult{MessageSent: true}, nil
+		},
+	}
+
+	resticSvc := &mockResticService{
+		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
+			return &models.BackupResult{
+				SnapshotID:          "abc123",
+				FilesNew:            10,
+				FilesChanged:        5,
+				FilesUnmodified:     100,
+				DataAdded:           1024 * 1024, // 1 MiB
+				TotalFilesProcessed: 115,
+				TotalBytesProcessed: 10 * 1024 * 1024,
+			}, nil
+		},
+	}
+
+	sshSvc := &mockSSHService{
+		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
+			return &models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil
+		},
+	}
+
+	runner := NewWithServices(
+		testLogger(),
+		resticSvc,
+		&mockWOLService{},
+		&mockPostgresService{},
+		sshSvc,
+		telegramSvc,
+		t.TempDir(),
+	)
+
+	cfg := minimalConfig()
+	cfg.Telegram = &models.TelegramConfig{
+		BotToken: "123456:ABC",
+		ChatID:   "-100123",
+	}
+	cfg.SSHShutdown = &models.SSHShutdownConfig{
+		Host:       "192.168.1.100",
+		PrivateKey: []byte("test-key"),
+	}
+
+	err := runner.Run(context.Background(), cfg)
+
+	// SSH shutdown failed, but backup succeeded
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "SSH shutdown failed")
+
+	// Telegram message should include backup stats even though run failed
+	assert.False(t, capturedMsg.Success)
+	assert.Equal(t, "ssh_shutdown", capturedMsg.FailedStep)
+	assert.Equal(t, "abc123", capturedMsg.SnapshotID)
+	assert.Equal(t, 10, capturedMsg.FilesNew)
+	assert.Equal(t, 5, capturedMsg.FilesChanged)
+	assert.Equal(t, int64(1024*1024), capturedMsg.DataAdded)
+}
+
+func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
+	// When backup and forget succeed but check fails, Telegram should include both stats
+	var capturedMsg models.TelegramMessage
+	telegramSvc := &mockTelegramService{
+		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
+			capturedMsg = msg
+			return &models.TelegramResult{MessageSent: true}, nil
+		},
+	}
+
+	resticSvc := &mockResticService{
+		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
+			return &models.BackupResult{
+				SnapshotID: "snap123",
+				FilesNew:   20,
+				DataAdded:  2048,
+			}, nil
+		},
+		forgetFunc: func(ctx context.Context, cfg models.ResticConfig, retention models.RetentionPolicy) (*models.ForgetResult, error) {
+			return &models.ForgetResult{
+				SnapshotsKept:    5,
+				SnapshotsRemoved: 2,
+			}, nil
+		},
+		checkFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error) {
+			return &models.CheckResult{Passed: false, Error: errors.New("repository corrupted")}, nil
+		},
+	}
+
+	runner := NewWithServices(
+		testLogger(),
+		resticSvc,
+		&mockWOLService{},
+		&mockPostgresService{},
+		&mockSSHService{},
+		telegramSvc,
+		t.TempDir(),
+	)
+
+	cfg := minimalConfig()
+	cfg.Telegram = &models.TelegramConfig{
+		BotToken: "123456:ABC",
+		ChatID:   "-100123",
+	}
+	cfg.Check = models.CheckSettings{Enabled: true}
+
+	err := runner.Run(context.Background(), cfg)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "check failed")
+
+	// Telegram should include backup and forget stats
+	assert.False(t, capturedMsg.Success)
+	assert.Equal(t, "check", capturedMsg.FailedStep)
+	assert.Equal(t, "snap123", capturedMsg.SnapshotID)
+	assert.Equal(t, 20, capturedMsg.FilesNew)
+	assert.Equal(t, 5, capturedMsg.SnapshotsKept)
+	assert.Equal(t, 2, capturedMsg.SnapshotsRemoved)
+}
+
+func TestRun_TelegramNoBackupStatsOnBackupFailure(t *testing.T) {
+	// When backup fails, Telegram should NOT include backup stats
+	var capturedMsg models.TelegramMessage
+	telegramSvc := &mockTelegramService{
+		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
+			capturedMsg = msg
+			return &models.TelegramResult{MessageSent: true}, nil
+		},
+	}
+
+	resticSvc := &mockResticService{
+		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
+			return &models.BackupResult{Error: errors.New("backup failed")}, nil
+		},
+	}
+
+	runner := NewWithServices(
+		testLogger(),
+		resticSvc,
+		&mockWOLService{},
+		&mockPostgresService{},
+		&mockSSHService{},
+		telegramSvc,
+		t.TempDir(),
+	)
+
+	cfg := minimalConfig()
+	cfg.Telegram = &models.TelegramConfig{
+		BotToken: "123456:ABC",
+		ChatID:   "-100123",
+	}
+
+	err := runner.Run(context.Background(), cfg)
+
+	assert.Error(t, err)
+
+	// Telegram should NOT include backup stats since backup failed
+	assert.False(t, capturedMsg.Success)
+	assert.Equal(t, "backup", capturedMsg.FailedStep)
+	assert.Empty(t, capturedMsg.SnapshotID)
+	assert.Zero(t, capturedMsg.FilesNew)
+	assert.Zero(t, capturedMsg.DataAdded)
 }

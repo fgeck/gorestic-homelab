@@ -70,20 +70,44 @@ func NewWithServices(
 // Run executes the complete backup workflow.
 //
 //nolint:gocognit,gocyclo // backup workflow has multiple steps by design
-func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
+func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr error) {
 	startTime := time.Now()
 	var failedStep string
-	var runErr error
+	wolAttempted := cfg.WOL != nil
+	wolSucceeded := false
+
+	// Track backup results for notification even if later steps fail
+	var backupStats *models.BackupResult
+	var forgetStats *models.ForgetResult
 
 	s.logger.Info().
 		Str("repository", cfg.Restic.Repository).
 		Str("host", cfg.Backup.Host).
 		Msg("starting backup run")
 
+	// Send notification on exit if configured (registered first, runs last due to LIFO)
 	defer func() {
-		// Send notification if configured
 		if cfg.Telegram != nil {
-			s.sendNotification(ctx, cfg, startTime, failedStep, runErr)
+			s.sendNotificationWithStats(ctx, cfg, startTime, failedStep, returnErr, backupStats, forgetStats)
+		}
+	}()
+
+	// SSH shutdown runs on exit if configured and either:
+	// - WOL was not configured (standalone SSH shutdown), or
+	// - WOL was configured and succeeded (machine was woken up)
+	// This ensures the target machine is shut down even if backup fails
+	// (registered second, runs before Telegram notification)
+	defer func() {
+		shouldShutdown := cfg.SSHShutdown != nil && (!wolAttempted || wolSucceeded)
+		if shouldShutdown {
+			if err := s.runSSHShutdown(ctx, cfg.SSHShutdown); err != nil {
+				s.logger.Error().Err(err).Msg("SSH shutdown failed")
+				// Don't override returnErr if backup already failed
+				if returnErr == nil {
+					failedStep = "ssh_shutdown"
+					returnErr = err
+				}
+			}
 		}
 	}()
 
@@ -91,15 +115,16 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 	if cfg.WOL != nil {
 		failedStep = "wol"
 		if err := s.runWOL(ctx, cfg.WOL); err != nil {
-			runErr = err
+			returnErr = err
 			return err
 		}
+		wolSucceeded = true
 	}
 
 	// Step 2: Initialize repository (if needed)
 	failedStep = "init"
 	if err := s.resticSvc.Init(ctx, cfg.Restic); err != nil {
-		runErr = err
+		returnErr = err
 		return fmt.Errorf("init failed: %w", err)
 	}
 
@@ -110,7 +135,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 		var err error
 		pgDumpPath, err = s.runPostgresDump(ctx, cfg.Postgres)
 		if err != nil {
-			runErr = err
+			returnErr = err
 			return err
 		}
 		defer func() { _ = os.Remove(pgDumpPath) }() // Clean up after backup
@@ -129,13 +154,16 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 		Host:  cfg.Backup.Host,
 	})
 	if err != nil {
-		runErr = err
+		returnErr = err
 		return fmt.Errorf("backup failed: %w", err)
 	}
 	if backupResult.Error != nil {
-		runErr = backupResult.Error
+		returnErr = backupResult.Error
 		return fmt.Errorf("backup failed: %w", backupResult.Error)
 	}
+
+	// Store backup stats for notification (even if later steps fail)
+	backupStats = backupResult
 
 	s.logger.Info().
 		Str("snapshot_id", backupResult.SnapshotID).
@@ -148,13 +176,16 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 	failedStep = "forget"
 	forgetResult, err := s.resticSvc.Forget(ctx, cfg.Restic, cfg.Retention)
 	if err != nil {
-		runErr = err
+		returnErr = err
 		return fmt.Errorf("forget failed: %w", err)
 	}
 	if forgetResult.Error != nil {
-		runErr = forgetResult.Error
+		returnErr = forgetResult.Error
 		return fmt.Errorf("forget failed: %w", forgetResult.Error)
 	}
+
+	// Store forget stats for notification
+	forgetStats = forgetResult
 
 	s.logger.Info().
 		Int("kept", forgetResult.SnapshotsKept).
@@ -166,31 +197,22 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) error {
 		failedStep = "check"
 		checkResult, err := s.resticSvc.Check(ctx, cfg.Restic, cfg.Check)
 		if err != nil {
-			runErr = err
+			returnErr = err
 			return fmt.Errorf("check failed: %w", err)
 		}
 		if checkResult.Error != nil {
-			runErr = checkResult.Error
+			returnErr = checkResult.Error
 			return fmt.Errorf("check failed: %w", checkResult.Error)
 		}
 		if !checkResult.Passed {
-			runErr = fmt.Errorf("repository check failed")
-			return runErr
+			returnErr = fmt.Errorf("repository check failed")
+			return returnErr
 		}
 
 		s.logger.Info().
 			Bool("passed", checkResult.Passed).
 			Dur("duration", checkResult.Duration).
 			Msg("repository check completed")
-	}
-
-	// Step 7: SSH shutdown (if configured)
-	if cfg.SSHShutdown != nil {
-		failedStep = "ssh_shutdown"
-		if err := s.runSSHShutdown(ctx, cfg.SSHShutdown); err != nil {
-			runErr = err
-			return err
-		}
 	}
 
 	// Success - clear failedStep
@@ -293,12 +315,14 @@ func (s *Impl) runSSHShutdown(ctx context.Context, cfg *models.SSHShutdownConfig
 	return nil
 }
 
-func (s *Impl) sendNotification(
+func (s *Impl) sendNotificationWithStats(
 	ctx context.Context,
 	cfg models.BackupConfig,
 	startTime time.Time,
 	failedStep string,
 	runErr error,
+	backupStats *models.BackupResult,
+	forgetStats *models.ForgetResult,
 ) {
 	// Collect backup stats for notification
 	msg := models.TelegramMessage{
@@ -314,14 +338,21 @@ func (s *Impl) sendNotification(
 		msg.ErrorMessage = runErr.Error()
 	}
 
-	// If backup was successful, try to get snapshot info
-	if runErr == nil {
-		snapshots, err := s.resticSvc.Snapshots(ctx, cfg.Restic)
-		if err == nil && len(snapshots) > 0 {
-			// Get the most recent snapshot
-			latest := snapshots[len(snapshots)-1]
-			msg.SnapshotID = latest.ID
-		}
+	// Include backup stats if backup succeeded (even if later steps failed)
+	if backupStats != nil {
+		msg.SnapshotID = backupStats.SnapshotID
+		msg.FilesNew = backupStats.FilesNew
+		msg.FilesChanged = backupStats.FilesChanged
+		msg.FilesUnmodified = backupStats.FilesUnmodified
+		msg.DataAdded = backupStats.DataAdded
+		msg.TotalFiles = backupStats.TotalFilesProcessed
+		msg.TotalBytes = backupStats.TotalBytesProcessed
+	}
+
+	// Include retention stats if forget succeeded
+	if forgetStats != nil {
+		msg.SnapshotsKept = forgetStats.SnapshotsKept
+		msg.SnapshotsRemoved = forgetStats.SnapshotsRemoved
 	}
 
 	result, err := s.telegramSvc.SendNotification(ctx, *cfg.Telegram, msg)
