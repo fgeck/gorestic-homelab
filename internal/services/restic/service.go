@@ -227,7 +227,7 @@ func (s *Impl) Backup(ctx context.Context, cfg models.ResticConfig, settings mod
 		Int("files_new", result.FilesNew).
 		Int("files_changed", result.FilesChanged).
 		Int64("data_added", result.DataAdded).
-		Dur("duration", result.Duration).
+		Str("duration", result.Duration.Round(time.Millisecond).String()).
 		Msg("backup completed")
 
 	return result, nil
@@ -313,7 +313,7 @@ func (s *Impl) Forget(ctx context.Context, cfg models.ResticConfig, policy model
 	s.logger.Info().
 		Int("kept", result.SnapshotsKept).
 		Int("removed", result.SnapshotsRemoved).
-		Dur("duration", result.Duration).
+		Str("duration", result.Duration.Round(time.Millisecond).String()).
 		Msg("retention policy applied")
 
 	return result, nil

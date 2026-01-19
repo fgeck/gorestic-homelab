@@ -141,7 +141,7 @@ func (s *Impl) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResul
 	result.WaitDuration = time.Since(start)
 
 	s.logger.Info().
-		Dur("duration", result.WaitDuration).
+		Str("duration", result.WaitDuration.Round(time.Millisecond).String()).
 		Msg("target is ready")
 
 	return result, nil

@@ -150,7 +150,7 @@ func (s *Impl) Dump(ctx context.Context, cfg models.PostgresConfig, outputPath s
 	s.logger.Info().
 		Str("output", outputPath).
 		Int64("size_bytes", result.SizeBytes).
-		Dur("duration", result.Duration).
+		Str("duration", result.Duration.Round(time.Millisecond).String()).
 		Msg("PostgreSQL dump completed")
 
 	return result, nil

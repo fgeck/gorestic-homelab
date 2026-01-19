@@ -201,7 +201,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	// Success - clear failedStep
 	failedStep = ""
 	s.logger.Info().
-		Dur("duration", time.Since(startTime)).
+		Str("duration", time.Since(startTime).Round(time.Millisecond).String()).
 		Msg("backup run completed successfully")
 
 	return nil
