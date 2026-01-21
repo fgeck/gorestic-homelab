@@ -568,6 +568,31 @@ func TestBackup_StreamingProgressStuckAtZero(t *testing.T) {
 	assert.Equal(t, []int{0}, loggedPercents)
 }
 
+func TestFormatKBytes(t *testing.T) {
+	tests := []struct {
+		bytes    uint64
+		expected string
+	}{
+		{0, "0"},
+		{1023, "0"},
+		{1024, "1"},
+		{1024 * 10, "10"},
+		{1024 * 100, "100"},
+		{1024 * 1000, "1,000"},
+		{1024 * 10000, "10,000"},
+		{1024 * 100000, "100,000"},
+		{1024 * 1000000, "1,000,000"},
+		{4330829775, "4,229,325"}, // ~4.2 GB in KB
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := formatKBytes(tt.bytes)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // parseLoggedPercents extracts percent values from log output.
 func parseLoggedPercents(t *testing.T, logOutput string) []int {
 	t.Helper()

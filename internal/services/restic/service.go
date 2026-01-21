@@ -96,6 +96,33 @@ func (e *DefaultExecutor) ExecuteWithEnvStreaming(ctx context.Context, env []str
 	return output.Bytes(), err
 }
 
+// formatKBytes formats bytes as kilobytes with thousand separators.
+func formatKBytes(bytes uint64) string {
+	kb := bytes / 1024
+	return formatWithCommas(kb)
+}
+
+// formatWithCommas adds thousand separators to a number.
+func formatWithCommas(n uint64) string {
+	s := fmt.Sprintf("%d", n)
+	if len(s) <= 3 {
+		return s
+	}
+
+	// Pre-allocate result: original length + number of commas
+	numCommas := (len(s) - 1) / 3
+	result := make([]byte, 0, len(s)+numCommas)
+
+	// Insert commas from right to left
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result = append(result, ',')
+		}
+		result = append(result, byte(c))
+	}
+	return string(result)
+}
+
 // Impl implements the Service interface.
 type Impl struct {
 	executor CommandExecutor
@@ -252,7 +279,7 @@ func (s *Impl) Backup(ctx context.Context, cfg models.ResticConfig, settings mod
 				s.logger.Debug().
 					Int("percent", currentPercent).
 					Uint64("files_done", progress.FilesDone).
-					Uint64("bytes_done", progress.BytesDone).
+					Str("kbytes_done", formatKBytes(progress.BytesDone)).
 					Msg("backup progress")
 			}
 		}
