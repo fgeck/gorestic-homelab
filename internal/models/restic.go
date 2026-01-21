@@ -39,3 +39,17 @@ type Snapshot struct {
 	Tags     []string
 	Paths    []string
 }
+
+// BackupProgress for restic status messages during backup.
+type BackupProgress struct {
+	MessageType  string   `json:"message_type"`
+	PercentDone  float64  `json:"percent_done"`
+	TotalFiles   uint64   `json:"total_files"`
+	FilesDone    uint64   `json:"files_done"`
+	TotalBytes   uint64   `json:"total_bytes"`
+	BytesDone    uint64   `json:"bytes_done"`
+	CurrentFiles []string `json:"current_files"`
+}
+
+// ResticProgressCallback for backup progress updates.
+type ResticProgressCallback func(progress BackupProgress)

@@ -2,6 +2,7 @@
 package restic
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -28,6 +29,7 @@ type Service interface {
 type CommandExecutor interface {
 	Execute(ctx context.Context, name string, args ...string) ([]byte, error)
 	ExecuteWithEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
+	ExecuteWithEnvStreaming(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error)
 }
 
 // DefaultExecutor is the default command executor using os/exec.
@@ -44,6 +46,54 @@ func (e *DefaultExecutor) ExecuteWithEnv(ctx context.Context, env []string, name
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), env...)
 	return cmd.CombinedOutput()
+}
+
+// ExecuteWithEnvStreaming runs a command with environment variables and streams stdout line-by-line.
+// It calls progressCb for each line that contains a status message, and returns all output.
+func (e *DefaultExecutor) ExecuteWithEnvStreaming(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = append(os.Environ(), env...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
+
+	// Capture stderr separately
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	var output bytes.Buffer
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		output.Write(line)
+		output.WriteByte('\n')
+
+		// Try to parse as progress message
+		if progressCb != nil {
+			var progress models.BackupProgress
+			if err := json.Unmarshal(line, &progress); err == nil {
+				if progress.MessageType == "status" {
+					progressCb(progress)
+				}
+			}
+		}
+	}
+
+	// Wait for command to complete
+	err = cmd.Wait()
+
+	// Append stderr to output for consistency with CombinedOutput behavior
+	if stderrBuf.Len() > 0 {
+		output.Write(stderrBuf.Bytes())
+	}
+
+	return output.Bytes(), err
 }
 
 // Impl implements the Service interface.
@@ -182,7 +232,23 @@ func (s *Impl) Backup(ctx context.Context, cfg models.ResticConfig, settings mod
 	// Add paths
 	args = append(args, settings.Paths...)
 
-	output, err := s.executor.ExecuteWithEnv(ctx, env, "restic", args...)
+	var output []byte
+	var err error
+
+	// Use streaming executor when debug logging is enabled to show progress
+	if s.logger.GetLevel() <= zerolog.DebugLevel {
+		progressCb := func(progress models.BackupProgress) {
+			s.logger.Debug().
+				Float64("percent_done", progress.PercentDone).
+				Uint64("files_done", progress.FilesDone).
+				Uint64("bytes_done", progress.BytesDone).
+				Msg("backup progress")
+		}
+		output, err = s.executor.ExecuteWithEnvStreaming(ctx, env, progressCb, "restic", args...)
+	} else {
+		output, err = s.executor.ExecuteWithEnv(ctx, env, "restic", args...)
+	}
+
 	if err != nil {
 		return &models.BackupResult{
 			Duration: time.Since(start),

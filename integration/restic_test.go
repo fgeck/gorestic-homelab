@@ -151,3 +151,39 @@ func TestResticCheck_Integration(t *testing.T) {
 	assert.True(t, result.Passed)
 	assert.Nil(t, result.Error)
 }
+
+func TestResticBackupProgress_Integration(t *testing.T) {
+	cfg := getResticConfig(t)
+
+	// Create temporary test data with multiple files to see progress
+	tmpDir := t.TempDir()
+	for i := 0; i < 100; i++ {
+		testFile := tmpDir + "/test" + string(rune('0'+i%10)) + string(rune('0'+i/10)) + ".txt"
+		err := os.WriteFile(testFile, []byte("test data for progress backup - padding to make files larger for progress visibility"), 0o600)
+		require.NoError(t, err)
+	}
+
+	// Use debug-level logger to enable progress streaming
+	debugLogger := zerolog.New(os.Stdout).With().Timestamp().Logger().Level(zerolog.DebugLevel)
+	svc := restic.New(debugLogger)
+
+	// Initialize repository first
+	err := svc.Init(context.Background(), cfg)
+	require.NoError(t, err)
+
+	// Perform backup - should show progress messages
+	backupSettings := models.BackupSettings{
+		Paths: []string{tmpDir},
+		Tags:  []string{"progress-test"},
+		Host:  "test-host",
+	}
+
+	t.Log("Starting backup with progress logging enabled (debug level)...")
+	result, err := svc.Backup(context.Background(), cfg, backupSettings)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.SnapshotID)
+	assert.Nil(t, result.Error)
+	t.Logf("Backup completed: snapshot=%s, files_new=%d, data_added=%d",
+		result.SnapshotID, result.FilesNew, result.DataAdded)
+}

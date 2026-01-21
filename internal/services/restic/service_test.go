@@ -16,8 +16,9 @@ import (
 
 // mockExecutor is a mock implementation of CommandExecutor for testing.
 type mockExecutor struct {
-	executeFunc        func(ctx context.Context, name string, args ...string) ([]byte, error)
-	executeWithEnvFunc func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
+	executeFunc                 func(ctx context.Context, name string, args ...string) ([]byte, error)
+	executeWithEnvFunc          func(ctx context.Context, env []string, name string, args ...string) ([]byte, error)
+	executeWithEnvStreamingFunc func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error)
 }
 
 func (m *mockExecutor) Execute(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -32,6 +33,14 @@ func (m *mockExecutor) ExecuteWithEnv(ctx context.Context, env []string, name st
 		return m.executeWithEnvFunc(ctx, env, name, args...)
 	}
 	return nil, nil
+}
+
+func (m *mockExecutor) ExecuteWithEnvStreaming(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+	if m.executeWithEnvStreamingFunc != nil {
+		return m.executeWithEnvStreamingFunc(ctx, env, progressCb, name, args...)
+	}
+	// Fall back to non-streaming version for compatibility
+	return m.ExecuteWithEnv(ctx, env, name, args...)
 }
 
 func testLogger() zerolog.Logger {
@@ -406,4 +415,106 @@ func TestBuildEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBackup_StreamingProgress(t *testing.T) {
+	// Simulated restic JSON output with status messages
+	statusMsg1 := `{"message_type":"status","percent_done":0.25,"files_done":150,"bytes_done":52428800,"total_files":600,"total_bytes":209715200}`
+	statusMsg2 := `{"message_type":"status","percent_done":0.50,"files_done":300,"bytes_done":104857600,"total_files":600,"total_bytes":209715200}`
+	summaryMsg := `{"message_type":"summary","files_new":10,"files_changed":5,"files_unmodified":585,"data_added":1048576,"total_files_processed":600,"total_bytes_processed":209715200,"snapshot_id":"abc123"}`
+	fullOutput := statusMsg1 + "\n" + statusMsg2 + "\n" + summaryMsg + "\n"
+
+	var progressUpdates []models.BackupProgress
+
+	executor := &mockExecutor{
+		executeWithEnvStreamingFunc: func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+			// Simulate streaming by calling progressCb for status messages
+			var progress1, progress2 models.BackupProgress
+			_ = json.Unmarshal([]byte(statusMsg1), &progress1)
+			_ = json.Unmarshal([]byte(statusMsg2), &progress2)
+
+			if progressCb != nil {
+				progressCb(progress1)
+				progressCb(progress2)
+			}
+			progressUpdates = append(progressUpdates, progress1, progress2)
+
+			return []byte(fullOutput), nil
+		},
+	}
+
+	// Create logger with Debug level to trigger streaming
+	logger := zerolog.New(io.Discard).Level(zerolog.DebugLevel)
+	svc := NewWithExecutor(logger, executor)
+
+	settings := models.BackupSettings{
+		Paths: []string{"/data"},
+		Host:  "testhost",
+	}
+
+	result, err := svc.Backup(context.Background(), testConfig(), settings)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Nil(t, result.Error)
+	assert.Equal(t, "abc123", result.SnapshotID)
+
+	// Verify progress updates were captured
+	require.Len(t, progressUpdates, 2)
+	assert.Equal(t, 0.25, progressUpdates[0].PercentDone)
+	assert.Equal(t, uint64(150), progressUpdates[0].FilesDone)
+	assert.Equal(t, 0.50, progressUpdates[1].PercentDone)
+	assert.Equal(t, uint64(300), progressUpdates[1].FilesDone)
+}
+
+func TestBackup_NonStreamingWithInfoLevel(t *testing.T) {
+	summary := `{"message_type":"summary","files_new":10,"snapshot_id":"abc123"}`
+	streamingCalled := false
+	nonStreamingCalled := false
+
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			nonStreamingCalled = true
+			return []byte(summary), nil
+		},
+		executeWithEnvStreamingFunc: func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+			streamingCalled = true
+			return []byte(summary), nil
+		},
+	}
+
+	// Create logger with Info level (not Debug) - should use non-streaming
+	logger := zerolog.New(io.Discard).Level(zerolog.InfoLevel)
+	svc := NewWithExecutor(logger, executor)
+
+	settings := models.BackupSettings{
+		Paths: []string{"/data"},
+	}
+
+	result, err := svc.Backup(context.Background(), testConfig(), settings)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "abc123", result.SnapshotID)
+
+	// Verify non-streaming was used
+	assert.True(t, nonStreamingCalled, "non-streaming executor should be called")
+	assert.False(t, streamingCalled, "streaming executor should not be called")
+}
+
+func TestBackupProgress_JSONParsing(t *testing.T) {
+	jsonStr := `{"message_type":"status","percent_done":0.75,"total_files":1000,"files_done":750,"total_bytes":1073741824,"bytes_done":805306368,"current_files":["/data/file1.txt","/data/file2.txt"]}`
+
+	var progress models.BackupProgress
+	err := json.Unmarshal([]byte(jsonStr), &progress)
+
+	require.NoError(t, err)
+	assert.Equal(t, "status", progress.MessageType)
+	assert.Equal(t, 0.75, progress.PercentDone)
+	assert.Equal(t, uint64(1000), progress.TotalFiles)
+	assert.Equal(t, uint64(750), progress.FilesDone)
+	assert.Equal(t, uint64(1073741824), progress.TotalBytes)
+	assert.Equal(t, uint64(805306368), progress.BytesDone)
+	assert.Len(t, progress.CurrentFiles, 2)
+	assert.Equal(t, "/data/file1.txt", progress.CurrentFiles[0])
 }
