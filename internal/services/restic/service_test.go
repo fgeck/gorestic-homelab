@@ -475,9 +475,10 @@ func TestBackup_StreamingProgress(t *testing.T) {
 }
 
 func TestBackup_StreamingProgressFiltering(t *testing.T) {
-	// Test that only new whole percentages are logged
-	// Simulates: 0%, 0.5%, 1%, 1.5%, 2%, 2%
+	// Test that only new whole percentages are logged when callbacks happen quickly
+	// Simulates: 0%, 0.5%, 1%, 1.5%, 2%, 2.5%
 	// Should only log: 0%, 1%, 2% (3 unique whole percentages)
+	// Time-based logging (every 30s) won't trigger since callbacks are instant
 	statusMsgs := []string{
 		`{"message_type":"status","percent_done":0.001,"files_done":1,"bytes_done":1000}`,
 		`{"message_type":"status","percent_done":0.005,"files_done":5,"bytes_done":5000}`,
@@ -488,7 +489,6 @@ func TestBackup_StreamingProgressFiltering(t *testing.T) {
 	}
 	summaryMsg := `{"message_type":"summary","snapshot_id":"abc123"}`
 
-	var loggedPercents []int
 	var logBuffer bytes.Buffer
 	logger := zerolog.New(&logBuffer).Level(zerolog.DebugLevel)
 
@@ -515,12 +515,68 @@ func TestBackup_StreamingProgressFiltering(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse log output to count how many progress messages were logged
-	logOutput := logBuffer.String()
+	loggedPercents := parseLoggedPercents(t, logBuffer.String())
+
+	// Should have logged 0%, 1%, 2% = 3 entries (no time-based logs since instant)
+	assert.Len(t, loggedPercents, 3, "should only log unique whole percentages")
+	assert.Equal(t, []int{0, 1, 2}, loggedPercents)
+}
+
+func TestBackup_StreamingProgressStuckAtZero(t *testing.T) {
+	// Test that progress is logged even when stuck at 0% for a long time
+	// This simulates a large backup where percent stays at 0% but files/bytes increase
+	// The time-based logging (every 30s) ensures we see progress
+	statusMsgs := []string{
+		`{"message_type":"status","percent_done":0.001,"files_done":10,"bytes_done":1000000}`,
+		`{"message_type":"status","percent_done":0.002,"files_done":20,"bytes_done":2000000}`,
+		`{"message_type":"status","percent_done":0.003,"files_done":30,"bytes_done":3000000}`,
+		`{"message_type":"status","percent_done":0.004,"files_done":40,"bytes_done":4000000}`,
+	}
+	summaryMsg := `{"message_type":"summary","snapshot_id":"abc123"}`
+
+	var logBuffer bytes.Buffer
+	logger := zerolog.New(&logBuffer).Level(zerolog.DebugLevel)
+
+	executor := &mockExecutor{
+		executeWithEnvStreamingFunc: func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+			for _, msg := range statusMsgs {
+				var progress models.BackupProgress
+				_ = json.Unmarshal([]byte(msg), &progress)
+				if progressCb != nil {
+					progressCb(progress)
+				}
+			}
+			return []byte(summaryMsg), nil
+		},
+	}
+
+	svc := NewWithExecutor(logger, executor)
+
+	settings := models.BackupSettings{
+		Paths: []string{"/data"},
+	}
+
+	_, err := svc.Backup(context.Background(), testConfig(), settings)
+	require.NoError(t, err)
+
+	// Parse log output
+	loggedPercents := parseLoggedPercents(t, logBuffer.String())
+
+	// All messages are at 0% (0.001-0.004 rounds to 0), so only 1 log entry
+	// (time-based logging won't trigger in this fast test)
+	assert.Len(t, loggedPercents, 1, "should log once at 0%")
+	assert.Equal(t, []int{0}, loggedPercents)
+}
+
+// parseLoggedPercents extracts percent values from log output.
+func parseLoggedPercents(t *testing.T, logOutput string) []int {
+	t.Helper()
+	var loggedPercents []int
 	for _, line := range bytes.Split([]byte(logOutput), []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}
-		var logEntry map[string]interface{}
+		var logEntry map[string]any
 		if err := json.Unmarshal(line, &logEntry); err == nil {
 			if msg, ok := logEntry["message"].(string); ok && msg == "backup progress" {
 				if pct, ok := logEntry["percent"].(float64); ok {
@@ -529,10 +585,7 @@ func TestBackup_StreamingProgressFiltering(t *testing.T) {
 			}
 		}
 	}
-
-	// Should have logged 0%, 1%, 2% = 3 entries
-	assert.Len(t, loggedPercents, 3, "should only log unique whole percentages")
-	assert.Equal(t, []int{0, 1, 2}, loggedPercents)
+	return loggedPercents
 }
 
 func TestBackup_NonStreamingWithInfoLevel(t *testing.T) {

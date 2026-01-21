@@ -164,7 +164,9 @@ func TestResticBackupProgress_Integration(t *testing.T) {
 	}
 
 	// Use debug-level logger to enable progress streaming
-	// Progress is only logged when a new whole percentage (0-100) is reached
+	// Progress is logged when:
+	// 1. A new whole percentage (0-100) is reached, OR
+	// 2. 30 seconds have passed since last log (for slow backups stuck at same %)
 	debugLogger := zerolog.New(os.Stdout).With().Timestamp().Logger().Level(zerolog.DebugLevel)
 	svc := restic.New(debugLogger)
 
@@ -172,7 +174,7 @@ func TestResticBackupProgress_Integration(t *testing.T) {
 	err := svc.Init(context.Background(), cfg)
 	require.NoError(t, err)
 
-	// Perform backup - should show progress messages at each new percentage
+	// Perform backup - should show progress messages
 	backupSettings := models.BackupSettings{
 		Paths: []string{tmpDir},
 		Tags:  []string{"progress-test"},
@@ -180,7 +182,7 @@ func TestResticBackupProgress_Integration(t *testing.T) {
 	}
 
 	t.Log("Starting backup with progress logging enabled (debug level)...")
-	t.Log("Progress is logged only when reaching new whole percentages (0%, 1%, 2%, ..., 100%)")
+	t.Log("Progress logged on: new percentage OR every 30 seconds")
 	result, err := svc.Backup(context.Background(), cfg, backupSettings)
 
 	require.NoError(t, err)
