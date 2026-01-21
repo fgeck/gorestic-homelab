@@ -237,12 +237,18 @@ func (s *Impl) Backup(ctx context.Context, cfg models.ResticConfig, settings mod
 
 	// Use streaming executor when debug logging is enabled to show progress
 	if s.logger.GetLevel() <= zerolog.DebugLevel {
+		lastLoggedPercent := -1
 		progressCb := func(progress models.BackupProgress) {
-			s.logger.Debug().
-				Float64("percent_done", progress.PercentDone).
-				Uint64("files_done", progress.FilesDone).
-				Uint64("bytes_done", progress.BytesDone).
-				Msg("backup progress")
+			// Only log when we reach a new whole percentage (1%, 2%, ..., 100%)
+			currentPercent := int(progress.PercentDone * 100)
+			if currentPercent > lastLoggedPercent {
+				lastLoggedPercent = currentPercent
+				s.logger.Debug().
+					Int("percent", currentPercent).
+					Uint64("files_done", progress.FilesDone).
+					Uint64("bytes_done", progress.BytesDone).
+					Msg("backup progress")
+			}
 		}
 		output, err = s.executor.ExecuteWithEnvStreaming(ctx, env, progressCb, "restic", args...)
 	} else {

@@ -1,6 +1,7 @@
 package restic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -418,27 +419,36 @@ func TestBuildEnv(t *testing.T) {
 }
 
 func TestBackup_StreamingProgress(t *testing.T) {
-	// Simulated restic JSON output with status messages
-	statusMsg1 := `{"message_type":"status","percent_done":0.25,"files_done":150,"bytes_done":52428800,"total_files":600,"total_bytes":209715200}`
-	statusMsg2 := `{"message_type":"status","percent_done":0.50,"files_done":300,"bytes_done":104857600,"total_files":600,"total_bytes":209715200}`
+	// Simulated restic JSON output with status messages at different percentages
+	// These represent: 10%, 10% (duplicate), 25%, 50%, 50% (duplicate)
+	statusMsgs := []string{
+		`{"message_type":"status","percent_done":0.10,"files_done":60,"bytes_done":20971520,"total_files":600,"total_bytes":209715200}`,
+		`{"message_type":"status","percent_done":0.105,"files_done":63,"bytes_done":22020096,"total_files":600,"total_bytes":209715200}`,
+		`{"message_type":"status","percent_done":0.25,"files_done":150,"bytes_done":52428800,"total_files":600,"total_bytes":209715200}`,
+		`{"message_type":"status","percent_done":0.50,"files_done":300,"bytes_done":104857600,"total_files":600,"total_bytes":209715200}`,
+		`{"message_type":"status","percent_done":0.501,"files_done":301,"bytes_done":105000000,"total_files":600,"total_bytes":209715200}`,
+	}
 	summaryMsg := `{"message_type":"summary","files_new":10,"files_changed":5,"files_unmodified":585,"data_added":1048576,"total_files_processed":600,"total_bytes_processed":209715200,"snapshot_id":"abc123"}`
-	fullOutput := statusMsg1 + "\n" + statusMsg2 + "\n" + summaryMsg + "\n"
 
-	var progressUpdates []models.BackupProgress
+	var callbackCount int
 
 	executor := &mockExecutor{
 		executeWithEnvStreamingFunc: func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
-			// Simulate streaming by calling progressCb for status messages
-			var progress1, progress2 models.BackupProgress
-			_ = json.Unmarshal([]byte(statusMsg1), &progress1)
-			_ = json.Unmarshal([]byte(statusMsg2), &progress2)
-
-			if progressCb != nil {
-				progressCb(progress1)
-				progressCb(progress2)
+			// Simulate streaming by calling progressCb for each status message
+			for _, msg := range statusMsgs {
+				var progress models.BackupProgress
+				_ = json.Unmarshal([]byte(msg), &progress)
+				if progressCb != nil {
+					progressCb(progress)
+					callbackCount++
+				}
 			}
-			progressUpdates = append(progressUpdates, progress1, progress2)
 
+			fullOutput := ""
+			for _, msg := range statusMsgs {
+				fullOutput += msg + "\n"
+			}
+			fullOutput += summaryMsg + "\n"
 			return []byte(fullOutput), nil
 		},
 	}
@@ -459,12 +469,70 @@ func TestBackup_StreamingProgress(t *testing.T) {
 	assert.Nil(t, result.Error)
 	assert.Equal(t, "abc123", result.SnapshotID)
 
-	// Verify progress updates were captured
-	require.Len(t, progressUpdates, 2)
-	assert.Equal(t, 0.25, progressUpdates[0].PercentDone)
-	assert.Equal(t, uint64(150), progressUpdates[0].FilesDone)
-	assert.Equal(t, 0.50, progressUpdates[1].PercentDone)
-	assert.Equal(t, uint64(300), progressUpdates[1].FilesDone)
+	// Verify all 5 status messages were passed to callback
+	// (the filtering of duplicates happens inside the callback in Backup())
+	assert.Equal(t, 5, callbackCount)
+}
+
+func TestBackup_StreamingProgressFiltering(t *testing.T) {
+	// Test that only new whole percentages are logged
+	// Simulates: 0%, 0.5%, 1%, 1.5%, 2%, 2%
+	// Should only log: 0%, 1%, 2% (3 unique whole percentages)
+	statusMsgs := []string{
+		`{"message_type":"status","percent_done":0.001,"files_done":1,"bytes_done":1000}`,
+		`{"message_type":"status","percent_done":0.005,"files_done":5,"bytes_done":5000}`,
+		`{"message_type":"status","percent_done":0.01,"files_done":10,"bytes_done":10000}`,
+		`{"message_type":"status","percent_done":0.015,"files_done":15,"bytes_done":15000}`,
+		`{"message_type":"status","percent_done":0.02,"files_done":20,"bytes_done":20000}`,
+		`{"message_type":"status","percent_done":0.025,"files_done":25,"bytes_done":25000}`,
+	}
+	summaryMsg := `{"message_type":"summary","snapshot_id":"abc123"}`
+
+	var loggedPercents []int
+	var logBuffer bytes.Buffer
+	logger := zerolog.New(&logBuffer).Level(zerolog.DebugLevel)
+
+	executor := &mockExecutor{
+		executeWithEnvStreamingFunc: func(ctx context.Context, env []string, progressCb models.ResticProgressCallback, name string, args ...string) ([]byte, error) {
+			for _, msg := range statusMsgs {
+				var progress models.BackupProgress
+				_ = json.Unmarshal([]byte(msg), &progress)
+				if progressCb != nil {
+					progressCb(progress)
+				}
+			}
+			return []byte(summaryMsg), nil
+		},
+	}
+
+	svc := NewWithExecutor(logger, executor)
+
+	settings := models.BackupSettings{
+		Paths: []string{"/data"},
+	}
+
+	_, err := svc.Backup(context.Background(), testConfig(), settings)
+	require.NoError(t, err)
+
+	// Parse log output to count how many progress messages were logged
+	logOutput := logBuffer.String()
+	for _, line := range bytes.Split([]byte(logOutput), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var logEntry map[string]interface{}
+		if err := json.Unmarshal(line, &logEntry); err == nil {
+			if msg, ok := logEntry["message"].(string); ok && msg == "backup progress" {
+				if pct, ok := logEntry["percent"].(float64); ok {
+					loggedPercents = append(loggedPercents, int(pct))
+				}
+			}
+		}
+	}
+
+	// Should have logged 0%, 1%, 2% = 3 entries
+	assert.Len(t, loggedPercents, 3, "should only log unique whole percentages")
+	assert.Equal(t, []int{0, 1, 2}, loggedPercents)
 }
 
 func TestBackup_NonStreamingWithInfoLevel(t *testing.T) {
