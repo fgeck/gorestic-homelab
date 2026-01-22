@@ -8,114 +8,16 @@ import (
 	"time"
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
+	postgresmocks "github.com/fgeck/gorestic-homelab/internal/services/postgres/mocks"
+	resticmocks "github.com/fgeck/gorestic-homelab/internal/services/restic/mocks"
+	sshmocks "github.com/fgeck/gorestic-homelab/internal/services/ssh/mocks"
+	telegrammocks "github.com/fgeck/gorestic-homelab/internal/services/telegram/mocks"
+	wolmocks "github.com/fgeck/gorestic-homelab/internal/services/wol/mocks"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-// Mock implementations.
-type mockResticService struct {
-	initFunc      func(ctx context.Context, cfg models.ResticConfig) error
-	unlockFunc    func(ctx context.Context, cfg models.ResticConfig) error
-	snapshotsFunc func(ctx context.Context, cfg models.ResticConfig) ([]models.Snapshot, error)
-	backupFunc    func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error)
-	forgetFunc    func(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error)
-	checkFunc     func(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error)
-}
-
-func (m *mockResticService) Init(ctx context.Context, cfg models.ResticConfig) error {
-	if m.initFunc != nil {
-		return m.initFunc(ctx, cfg)
-	}
-	return nil
-}
-
-func (m *mockResticService) Unlock(ctx context.Context, cfg models.ResticConfig) error {
-	if m.unlockFunc != nil {
-		return m.unlockFunc(ctx, cfg)
-	}
-	return nil
-}
-
-func (m *mockResticService) Snapshots(ctx context.Context, cfg models.ResticConfig) ([]models.Snapshot, error) {
-	if m.snapshotsFunc != nil {
-		return m.snapshotsFunc(ctx, cfg)
-	}
-	return []models.Snapshot{}, nil
-}
-
-func (m *mockResticService) Backup(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-	if m.backupFunc != nil {
-		return m.backupFunc(ctx, cfg, settings)
-	}
-	return &models.BackupResult{SnapshotID: "test123"}, nil
-}
-
-func (m *mockResticService) Forget(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error) {
-	if m.forgetFunc != nil {
-		return m.forgetFunc(ctx, cfg, policy)
-	}
-	return &models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil
-}
-
-func (m *mockResticService) Check(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error) {
-	if m.checkFunc != nil {
-		return m.checkFunc(ctx, cfg, settings)
-	}
-	return &models.CheckResult{Passed: true}, nil
-}
-
-type mockWOLService struct {
-	wakeFunc func(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error)
-}
-
-func (m *mockWOLService) Wake(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error) {
-	if m.wakeFunc != nil {
-		return m.wakeFunc(ctx, cfg)
-	}
-	return &models.WOLResult{PacketSent: true, TargetReady: true}, nil
-}
-
-type mockPostgresService struct {
-	dumpFunc func(ctx context.Context, cfg models.PostgresConfig, outputPath string) (*models.PostgresDumpResult, error)
-}
-
-func (m *mockPostgresService) Dump(ctx context.Context, cfg models.PostgresConfig, outputPath string) (*models.PostgresDumpResult, error) {
-	if m.dumpFunc != nil {
-		return m.dumpFunc(ctx, cfg, outputPath)
-	}
-	return &models.PostgresDumpResult{OutputPath: outputPath, SizeBytes: 1024}, nil
-}
-
-type mockSSHService struct {
-	shutdownFunc       func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error)
-	testConnectionFunc func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error)
-}
-
-func (m *mockSSHService) Shutdown(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-	if m.shutdownFunc != nil {
-		return m.shutdownFunc(ctx, cfg)
-	}
-	return &models.SSHResult{CommandRun: true}, nil
-}
-
-func (m *mockSSHService) TestConnection(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-	if m.testConnectionFunc != nil {
-		return m.testConnectionFunc(ctx, cfg)
-	}
-	return &models.SSHResult{CommandRun: true, Output: "OK"}, nil
-}
-
-type mockTelegramService struct {
-	sendFunc func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error)
-}
-
-func (m *mockTelegramService) SendNotification(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-	if m.sendFunc != nil {
-		return m.sendFunc(ctx, cfg, msg)
-	}
-	return &models.TelegramResult{MessageSent: true}, nil
-}
 
 func testLogger() zerolog.Logger {
 	return zerolog.New(io.Discard)
@@ -140,11 +42,16 @@ func minimalConfig() models.BackupConfig {
 }
 
 func TestRun_Success_MinimalConfig(t *testing.T) {
-	resticSvc := &mockResticService{}
-	wolSvc := &mockWOLService{}
-	postgresSvc := &mockPostgresService{}
-	sshSvc := &mockSSHService{}
-	telegramSvc := &mockTelegramService{}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Set up expectations for minimal config
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test123"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
@@ -162,22 +69,27 @@ func TestRun_Success_MinimalConfig(t *testing.T) {
 }
 
 func TestRun_WithWOL(t *testing.T) {
-	wolCalled := false
-	resticSvc := &mockResticService{}
-	wolSvc := &mockWOLService{
-		wakeFunc: func(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error) {
-			wolCalled = true
-			return &models.WOLResult{PacketSent: true, TargetReady: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// WOL should be called
+	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{PacketSent: true, TargetReady: true}, nil)
+
+	// Standard restic operations
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
 		wolSvc,
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -192,23 +104,25 @@ func TestRun_WithWOL(t *testing.T) {
 	err := runner.Run(context.Background(), cfg)
 
 	assert.NoError(t, err)
-	assert.True(t, wolCalled)
 }
 
 func TestRun_WOLFailure(t *testing.T) {
-	wolSvc := &mockWOLService{
-		wakeFunc: func(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error) {
-			return &models.WOLResult{Error: errors.New("timeout")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// WOL fails
+	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{Error: errors.New("timeout")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
+		resticSvc,
 		wolSvc,
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -224,30 +138,31 @@ func TestRun_WOLFailure(t *testing.T) {
 }
 
 func TestRun_WithPostgres(t *testing.T) {
-	postgresCalled := false
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
 	var capturedPaths []string
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			capturedPaths = settings.Paths
-			return &models.BackupResult{SnapshotID: "test"}, nil
-		},
-	}
+	// Postgres dump should be called
+	postgresSvc.EXPECT().Dump(mock.Anything, mock.Anything, mock.Anything).Return(&models.PostgresDumpResult{OutputPath: "/tmp/dump.sql", SizeBytes: 1024}, nil)
 
-	postgresSvc := &mockPostgresService{
-		dumpFunc: func(ctx context.Context, cfg models.PostgresConfig, outputPath string) (*models.PostgresDumpResult, error) {
-			postgresCalled = true
-			return &models.PostgresDumpResult{OutputPath: outputPath, SizeBytes: 1024}, nil
-		},
-	}
+	// Standard restic operations
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) {
+		capturedPaths = settings.Paths
+	}).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
+		wolSvc,
 		postgresSvc,
-		&mockSSHService{},
-		&mockTelegramService{},
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -263,25 +178,28 @@ func TestRun_WithPostgres(t *testing.T) {
 	err := runner.Run(context.Background(), cfg)
 
 	assert.NoError(t, err)
-	assert.True(t, postgresCalled)
 	// Should have original path plus pg dump path
 	assert.Len(t, capturedPaths, 2)
 }
 
 func TestRun_PostgresDumpFailure(t *testing.T) {
-	postgresSvc := &mockPostgresService{
-		dumpFunc: func(ctx context.Context, cfg models.PostgresConfig, outputPath string) (*models.PostgresDumpResult, error) {
-			return &models.PostgresDumpResult{Error: errors.New("connection refused")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Init succeeds, but postgres dump fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	postgresSvc.EXPECT().Dump(mock.Anything, mock.Anything, mock.Anything).Return(&models.PostgresDumpResult{Error: errors.New("connection refused")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
-		&mockWOLService{},
+		resticSvc,
+		wolSvc,
 		postgresSvc,
-		&mockSSHService{},
-		&mockTelegramService{},
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -297,19 +215,23 @@ func TestRun_PostgresDumpFailure(t *testing.T) {
 }
 
 func TestRun_BackupFailure(t *testing.T) {
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{Error: errors.New("disk full")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Init and unlock succeed, backup fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("disk full")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -320,19 +242,24 @@ func TestRun_BackupFailure(t *testing.T) {
 }
 
 func TestRun_ForgetFailure(t *testing.T) {
-	resticSvc := &mockResticService{
-		forgetFunc: func(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error) {
-			return &models.ForgetResult{Error: errors.New("prune failed")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Backup succeeds, forget fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{Error: errors.New("prune failed")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -343,21 +270,25 @@ func TestRun_ForgetFailure(t *testing.T) {
 }
 
 func TestRun_WithCheck(t *testing.T) {
-	checkCalled := false
-	resticSvc := &mockResticService{
-		checkFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error) {
-			checkCalled = true
-			return &models.CheckResult{Passed: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// All operations succeed including check
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
+	resticSvc.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(&models.CheckResult{Passed: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -370,23 +301,28 @@ func TestRun_WithCheck(t *testing.T) {
 	err := runner.Run(context.Background(), cfg)
 
 	assert.NoError(t, err)
-	assert.True(t, checkCalled)
 }
 
 func TestRun_CheckFailure(t *testing.T) {
-	resticSvc := &mockResticService{
-		checkFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error) {
-			return &models.CheckResult{Passed: false, Error: errors.New("corruption detected")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Backup and forget succeed, check fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
+	resticSvc.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(&models.CheckResult{Passed: false, Error: errors.New("corruption detected")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -400,21 +336,25 @@ func TestRun_CheckFailure(t *testing.T) {
 }
 
 func TestRun_WithSSHShutdown(t *testing.T) {
-	sshCalled := false
-	sshSvc := &mockSSHService{
-		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-			sshCalled = true
-			return &models.SSHResult{CommandRun: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// All operations succeed including SSH shutdown
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
+	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
-		&mockWOLService{},
-		&mockPostgresService{},
+		resticSvc,
+		wolSvc,
+		postgresSvc,
 		sshSvc,
-		&mockTelegramService{},
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -430,25 +370,28 @@ func TestRun_WithSSHShutdown(t *testing.T) {
 	err := runner.Run(context.Background(), cfg)
 
 	assert.NoError(t, err)
-	assert.True(t, sshCalled)
 }
 
 func TestRun_SSHShutdownFailure(t *testing.T) {
-	sshCalled := false
-	sshSvc := &mockSSHService{
-		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-			sshCalled = true
-			return &models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Backup succeeds, SSH shutdown fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
+	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
-		&mockWOLService{},
-		&mockPostgresService{},
+		resticSvc,
+		wolSvc,
+		postgresSvc,
 		sshSvc,
-		&mockTelegramService{},
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -463,32 +406,33 @@ func TestRun_SSHShutdownFailure(t *testing.T) {
 	// SSH shutdown runs in defer, failure is returned even if backup succeeded
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "SSH shutdown failed")
-	assert.True(t, sshCalled)
 }
 
 func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
 	// When WOL succeeds but backup fails, SSH shutdown should still run
-	sshCalled := false
-	sshSvc := &mockSSHService{
-		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-			sshCalled = true
-			return &models.SSHResult{CommandRun: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{Error: errors.New("backup failed")}, nil
-		},
-	}
+	// WOL succeeds
+	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{PacketSent: true, TargetReady: true}, nil)
+
+	// Backup fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
+
+	// SSH shutdown should still be called (deferred)
+	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
+		wolSvc,
+		postgresSvc,
 		sshSvc,
-		&mockTelegramService{},
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -507,32 +451,28 @@ func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
 	// Backup failed, but SSH shutdown should still have been called
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "backup failed")
-	assert.True(t, sshCalled, "SSH shutdown should run even when backup fails")
 }
 
 func TestRun_SSHShutdownSkippedWhenWOLFails(t *testing.T) {
 	// When WOL fails, SSH shutdown should NOT run (machine wasn't woken up)
-	sshCalled := false
-	sshSvc := &mockSSHService{
-		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-			sshCalled = true
-			return &models.SSHResult{CommandRun: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
 
-	wolSvc := &mockWOLService{
-		wakeFunc: func(ctx context.Context, cfg models.WOLConfig) (*models.WOLResult, error) {
-			return &models.WOLResult{Error: errors.New("WOL failed")}, nil
-		},
-	}
+	// WOL fails
+	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{Error: errors.New("WOL failed")}, nil)
+
+	// SSH shutdown should NOT be called because WOL failed
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
+		resticSvc,
 		wolSvc,
-		&mockPostgresService{},
+		postgresSvc,
 		sshSvc,
-		&mockTelegramService{},
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -551,24 +491,33 @@ func TestRun_SSHShutdownSkippedWhenWOLFails(t *testing.T) {
 	// WOL failed, SSH shutdown should NOT be called
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "WOL failed")
-	assert.False(t, sshCalled, "SSH shutdown should NOT run when WOL fails")
 }
 
 func TestRun_WithTelegram_Success(t *testing.T) {
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
 	var capturedMsg models.TelegramMessage
-	telegramSvc := &mockTelegramService{
-		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-			capturedMsg = msg
-			return &models.TelegramResult{MessageSent: true}, nil
-		},
-	}
+
+	// Standard operations succeed
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
+
+	// Telegram notification should be sent
+	telegramSvc.EXPECT().SendNotification(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) {
+		capturedMsg = msg
+	}).Return(&models.TelegramResult{MessageSent: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
-		&mockResticService{},
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
+		resticSvc,
+		wolSvc,
+		postgresSvc,
+		sshSvc,
 		telegramSvc,
 		t.TempDir(),
 	)
@@ -588,26 +537,29 @@ func TestRun_WithTelegram_Success(t *testing.T) {
 }
 
 func TestRun_WithTelegram_Failure(t *testing.T) {
-	var capturedMsg models.TelegramMessage
-	telegramSvc := &mockTelegramService{
-		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-			capturedMsg = msg
-			return &models.TelegramResult{MessageSent: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{Error: errors.New("backup failed")}, nil
-		},
-	}
+	var capturedMsg models.TelegramMessage
+
+	// Backup fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
+
+	// Telegram notification should still be sent (with failure info)
+	telegramSvc.EXPECT().SendNotification(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) {
+		capturedMsg = msg
+	}).Return(&models.TelegramResult{MessageSent: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
 		telegramSvc,
 		t.TempDir(),
 	)
@@ -627,24 +579,22 @@ func TestRun_WithTelegram_Failure(t *testing.T) {
 }
 
 func TestRun_ContextCancelled(t *testing.T) {
-	resticSvc := &mockResticService{
-		initFunc: func(ctx context.Context, cfg models.ResticConfig) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(100 * time.Millisecond):
-				return nil
-			}
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Init returns context error
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(context.Canceled)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
-		&mockTelegramService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
 		t.TempDir(),
 	)
 
@@ -658,39 +608,40 @@ func TestRun_ContextCancelled(t *testing.T) {
 
 func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 	// When backup succeeds but SSH shutdown fails, Telegram should include backup stats
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
 	var capturedMsg models.TelegramMessage
-	telegramSvc := &mockTelegramService{
-		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-			capturedMsg = msg
-			return &models.TelegramResult{MessageSent: true}, nil
-		},
-	}
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{
-				SnapshotID:          "abc123",
-				FilesNew:            10,
-				FilesChanged:        5,
-				FilesUnmodified:     100,
-				DataAdded:           1024 * 1024, // 1 MiB
-				TotalFilesProcessed: 115,
-				TotalBytesProcessed: 10 * 1024 * 1024,
-			}, nil
-		},
-	}
+	// Backup succeeds with stats
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{
+		SnapshotID:          "abc123",
+		FilesNew:            10,
+		FilesChanged:        5,
+		FilesUnmodified:     100,
+		DataAdded:           1024 * 1024, // 1 MiB
+		TotalFilesProcessed: 115,
+		TotalBytesProcessed: 10 * 1024 * 1024,
+	}, nil)
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
-	sshSvc := &mockSSHService{
-		shutdownFunc: func(ctx context.Context, cfg models.SSHShutdownConfig) (*models.SSHResult, error) {
-			return &models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil
-		},
-	}
+	// SSH shutdown fails
+	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil)
+
+	// Telegram should include backup stats even though SSH failed
+	telegramSvc.EXPECT().SendNotification(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) {
+		capturedMsg = msg
+	}).Return(&models.TelegramResult{MessageSent: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
+		wolSvc,
+		postgresSvc,
 		sshSvc,
 		telegramSvc,
 		t.TempDir(),
@@ -723,39 +674,42 @@ func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 
 func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
 	// When backup and forget succeed but check fails, Telegram should include both stats
-	var capturedMsg models.TelegramMessage
-	telegramSvc := &mockTelegramService{
-		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-			capturedMsg = msg
-			return &models.TelegramResult{MessageSent: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{
-				SnapshotID: "snap123",
-				FilesNew:   20,
-				DataAdded:  2048,
-			}, nil
-		},
-		forgetFunc: func(ctx context.Context, cfg models.ResticConfig, retention models.RetentionPolicy) (*models.ForgetResult, error) {
-			return &models.ForgetResult{
-				SnapshotsKept:    5,
-				SnapshotsRemoved: 2,
-			}, nil
-		},
-		checkFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.CheckSettings) (*models.CheckResult, error) {
-			return &models.CheckResult{Passed: false, Error: errors.New("repository corrupted")}, nil
-		},
-	}
+	var capturedMsg models.TelegramMessage
+
+	// Backup succeeds
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{
+		SnapshotID: "snap123",
+		FilesNew:   20,
+		DataAdded:  2048,
+	}, nil)
+
+	// Forget succeeds
+	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{
+		SnapshotsKept:    5,
+		SnapshotsRemoved: 2,
+	}, nil)
+
+	// Check fails
+	resticSvc.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(&models.CheckResult{Passed: false, Error: errors.New("repository corrupted")}, nil)
+
+	// Telegram should include backup and forget stats
+	telegramSvc.EXPECT().SendNotification(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) {
+		capturedMsg = msg
+	}).Return(&models.TelegramResult{MessageSent: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
 		telegramSvc,
 		t.TempDir(),
 	)
@@ -783,26 +737,29 @@ func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
 
 func TestRun_TelegramNoBackupStatsOnBackupFailure(t *testing.T) {
 	// When backup fails, Telegram should NOT include backup stats
-	var capturedMsg models.TelegramMessage
-	telegramSvc := &mockTelegramService{
-		sendFunc: func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) (*models.TelegramResult, error) {
-			capturedMsg = msg
-			return &models.TelegramResult{MessageSent: true}, nil
-		},
-	}
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
 
-	resticSvc := &mockResticService{
-		backupFunc: func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error) {
-			return &models.BackupResult{Error: errors.New("backup failed")}, nil
-		},
-	}
+	var capturedMsg models.TelegramMessage
+
+	// Backup fails
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
+
+	// Telegram should NOT include backup stats since backup failed
+	telegramSvc.EXPECT().SendNotification(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.TelegramConfig, msg models.TelegramMessage) {
+		capturedMsg = msg
+	}).Return(&models.TelegramResult{MessageSent: true}, nil)
 
 	runner := NewWithServices(
 		testLogger(),
 		resticSvc,
-		&mockWOLService{},
-		&mockPostgresService{},
-		&mockSSHService{},
+		wolSvc,
+		postgresSvc,
+		sshSvc,
 		telegramSvc,
 		t.TempDir(),
 	)

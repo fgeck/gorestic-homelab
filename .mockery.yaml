@@ -1,27 +1,41 @@
-with-expecter: true
 packages:
   github.com/fgeck/gorestic-homelab/internal/services/restic:
+    config:
+      all: true
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName | snakecase}}.go"
     interfaces:
       Service:
-        config:
-          dir: "{{.InterfaceDir}}/mocks"
   github.com/fgeck/gorestic-homelab/internal/services/wol:
+    config:
+      all: true
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName | snakecase}}.go"
     interfaces:
       Service:
-        config:
-          dir: "{{.InterfaceDir}}/mocks"
   github.com/fgeck/gorestic-homelab/internal/services/postgres:
+    config:
+      all: true
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName | snakecase}}.go"
     interfaces:
       Service:
-        config:
-          dir: "{{.InterfaceDir}}/mocks"
   github.com/fgeck/gorestic-homelab/internal/services/ssh:
+    config:
+      all: true
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName | snakecase}}.go"
     interfaces:
       Service:
-        config:
-          dir: "{{.InterfaceDir}}/mocks"
   github.com/fgeck/gorestic-homelab/internal/services/telegram:
+    config:
+      all: true
+      dir: "{{.InterfaceDir}}/mocks"
+      pkgname: "mocks"
+      filename: "mock_{{.InterfaceName | snakecase}}.go"
     interfaces:
       Service:
-        config:
-          dir: "{{.InterfaceDir}}/mocks"
