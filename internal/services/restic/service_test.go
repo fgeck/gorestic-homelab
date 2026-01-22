@@ -106,6 +106,87 @@ func TestInit_FailedToInitialize(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to initialize repository")
 }
 
+func TestUnlock_NoLocks(t *testing.T) {
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			if name == "restic" && len(args) > 0 && args[0] == "list" && args[1] == "locks" {
+				// Empty output means no locks
+				return []byte(""), nil
+			}
+			return nil, errors.New("unexpected command")
+		},
+	}
+
+	svc := NewWithExecutor(testLogger(), executor)
+	err := svc.Unlock(context.Background(), testConfig())
+
+	assert.NoError(t, err)
+}
+
+func TestUnlock_WithLocks(t *testing.T) {
+	listLocksCalled := false
+	unlockCalled := false
+
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			if name == "restic" && len(args) >= 2 && args[0] == "list" && args[1] == "locks" {
+				listLocksCalled = true
+				// Return some lock IDs (one per line)
+				return []byte("abc123def456\nghi789jkl012\n"), nil
+			}
+			if name == "restic" && len(args) > 0 && args[0] == "unlock" {
+				unlockCalled = true
+				return []byte("successfully removed locks"), nil
+			}
+			return nil, errors.New("unexpected command")
+		},
+	}
+
+	svc := NewWithExecutor(testLogger(), executor)
+	err := svc.Unlock(context.Background(), testConfig())
+
+	assert.NoError(t, err)
+	assert.True(t, listLocksCalled, "list locks should be called")
+	assert.True(t, unlockCalled, "unlock should be called when locks exist")
+}
+
+func TestUnlock_ListLocksFails(t *testing.T) {
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			if name == "restic" && len(args) >= 2 && args[0] == "list" && args[1] == "locks" {
+				return []byte("connection refused"), errors.New("exit status 1")
+			}
+			return nil, errors.New("unexpected command")
+		},
+	}
+
+	svc := NewWithExecutor(testLogger(), executor)
+	err := svc.Unlock(context.Background(), testConfig())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to list locks")
+}
+
+func TestUnlock_UnlockFails(t *testing.T) {
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			if name == "restic" && len(args) >= 2 && args[0] == "list" && args[1] == "locks" {
+				return []byte("abc123def456\n"), nil
+			}
+			if name == "restic" && len(args) > 0 && args[0] == "unlock" {
+				return []byte("unlock failed"), errors.New("exit status 1")
+			}
+			return nil, errors.New("unexpected command")
+		},
+	}
+
+	svc := NewWithExecutor(testLogger(), executor)
+	err := svc.Unlock(context.Background(), testConfig())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to unlock repository")
+}
+
 func TestSnapshots_Success(t *testing.T) {
 	now := time.Now()
 	snaps := []snapshotJSON{

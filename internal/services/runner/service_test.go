@@ -16,6 +16,7 @@ import (
 // Mock implementations.
 type mockResticService struct {
 	initFunc      func(ctx context.Context, cfg models.ResticConfig) error
+	unlockFunc    func(ctx context.Context, cfg models.ResticConfig) error
 	snapshotsFunc func(ctx context.Context, cfg models.ResticConfig) ([]models.Snapshot, error)
 	backupFunc    func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error)
 	forgetFunc    func(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error)
@@ -25,6 +26,13 @@ type mockResticService struct {
 func (m *mockResticService) Init(ctx context.Context, cfg models.ResticConfig) error {
 	if m.initFunc != nil {
 		return m.initFunc(ctx, cfg)
+	}
+	return nil
+}
+
+func (m *mockResticService) Unlock(ctx context.Context, cfg models.ResticConfig) error {
+	if m.unlockFunc != nil {
+		return m.unlockFunc(ctx, cfg)
 	}
 	return nil
 }

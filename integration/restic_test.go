@@ -48,6 +48,52 @@ func TestResticInit_Integration(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestResticUnlock_NoLocks_Integration(t *testing.T) {
+	cfg := getResticConfig(t)
+
+	svc := restic.New(testLogger())
+
+	// Initialize repository first
+	err := svc.Init(context.Background(), cfg)
+	require.NoError(t, err)
+
+	// Unlock should succeed even when no locks exist
+	err = svc.Unlock(context.Background(), cfg)
+	require.NoError(t, err)
+}
+
+func TestResticUnlock_BeforeBackup_Integration(t *testing.T) {
+	cfg := getResticConfig(t)
+
+	// Create temporary test data
+	tmpDir := t.TempDir()
+	testFile := tmpDir + "/test.txt"
+	err := os.WriteFile(testFile, []byte("test data for unlock test"), 0o600)
+	require.NoError(t, err)
+
+	svc := restic.New(testLogger())
+
+	// Initialize repository first
+	err = svc.Init(context.Background(), cfg)
+	require.NoError(t, err)
+
+	// Unlock before backup (simulating the workflow)
+	err = svc.Unlock(context.Background(), cfg)
+	require.NoError(t, err)
+
+	// Backup should succeed after unlock
+	backupSettings := models.BackupSettings{
+		Paths: []string{tmpDir},
+		Tags:  []string{"unlock-test"},
+		Host:  "test-host",
+	}
+
+	result, err := svc.Backup(context.Background(), cfg, backupSettings)
+	require.NoError(t, err)
+	assert.NotEmpty(t, result.SnapshotID)
+	assert.Nil(t, result.Error)
+}
+
 func TestResticBackupAndSnapshots_Integration(t *testing.T) {
 	cfg := getResticConfig(t)
 

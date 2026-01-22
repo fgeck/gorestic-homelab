@@ -19,6 +19,7 @@ import (
 // Service defines the interface for restic operations.
 type Service interface {
 	Init(ctx context.Context, cfg models.ResticConfig) error
+	Unlock(ctx context.Context, cfg models.ResticConfig) error
 	Snapshots(ctx context.Context, cfg models.ResticConfig) ([]models.Snapshot, error)
 	Backup(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) (*models.BackupResult, error)
 	Forget(ctx context.Context, cfg models.ResticConfig, policy models.RetentionPolicy) (*models.ForgetResult, error)
@@ -182,6 +183,40 @@ func (s *Impl) Init(ctx context.Context, cfg models.ResticConfig) error {
 	}
 
 	s.logger.Info().Msg("repository initialized successfully")
+	return nil
+}
+
+// Unlock removes stale locks from the repository.
+// It first checks if any locks exist, and only runs unlock if needed.
+// This is safe to call even when no locks exist.
+func (s *Impl) Unlock(ctx context.Context, cfg models.ResticConfig) error {
+	s.logger.Debug().Msg("checking for stale locks")
+
+	env := s.buildEnv(cfg)
+
+	// List existing locks
+	output, err := s.executor.ExecuteWithEnv(ctx, env, "restic", "list", "locks")
+	if err != nil {
+		return fmt.Errorf("failed to list locks: %w, output: %s", err, string(output))
+	}
+
+	// If no locks, nothing to do
+	if len(bytes.TrimSpace(output)) == 0 {
+		s.logger.Debug().Msg("no locks found")
+		return nil
+	}
+
+	// Count locks (one ID per line)
+	lockCount := len(bytes.Split(bytes.TrimSpace(output), []byte("\n")))
+	s.logger.Warn().Int("lock_count", lockCount).Msg("found stale locks, removing")
+
+	// Run unlock to remove stale locks
+	output, err = s.executor.ExecuteWithEnv(ctx, env, "restic", "unlock")
+	if err != nil {
+		return fmt.Errorf("failed to unlock repository: %w, output: %s", err, string(output))
+	}
+
+	s.logger.Info().Msg("stale locks removed successfully")
 	return nil
 }
 
