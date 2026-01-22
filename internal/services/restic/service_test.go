@@ -123,7 +123,28 @@ func TestUnlock_NoLocks(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestUnlock_WithLocks(t *testing.T) {
+func TestUnlock_WithLocks_FailOnLockedTrue(t *testing.T) {
+	executor := &mockExecutor{
+		executeWithEnvFunc: func(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+			if name == "restic" && len(args) >= 2 && args[0] == "list" && args[1] == "locks" {
+				// Return some lock IDs (one per line)
+				return []byte("abc123def456\nghi789jkl012\n"), nil
+			}
+			return nil, errors.New("unexpected command")
+		},
+	}
+
+	svc := NewWithExecutor(testLogger(), executor)
+	cfg := testConfig()
+	cfg.FailOnLocked = true
+	err := svc.Unlock(context.Background(), cfg)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "repository has 2 stale lock(s)")
+	assert.Contains(t, err.Error(), "fail_on_locked: false")
+}
+
+func TestUnlock_WithLocks_FailOnLockedFalse(t *testing.T) {
 	listLocksCalled := false
 	unlockCalled := false
 
@@ -143,11 +164,13 @@ func TestUnlock_WithLocks(t *testing.T) {
 	}
 
 	svc := NewWithExecutor(testLogger(), executor)
-	err := svc.Unlock(context.Background(), testConfig())
+	cfg := testConfig()
+	cfg.FailOnLocked = false
+	err := svc.Unlock(context.Background(), cfg)
 
 	assert.NoError(t, err)
 	assert.True(t, listLocksCalled, "list locks should be called")
-	assert.True(t, unlockCalled, "unlock should be called when locks exist")
+	assert.True(t, unlockCalled, "unlock should be called when locks exist and fail_on_locked is false")
 }
 
 func TestUnlock_ListLocksFails(t *testing.T) {
@@ -181,7 +204,9 @@ func TestUnlock_UnlockFails(t *testing.T) {
 	}
 
 	svc := NewWithExecutor(testLogger(), executor)
-	err := svc.Unlock(context.Background(), testConfig())
+	cfg := testConfig()
+	cfg.FailOnLocked = false // Need to set false to reach the unlock command
+	err := svc.Unlock(context.Background(), cfg)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to unlock repository")

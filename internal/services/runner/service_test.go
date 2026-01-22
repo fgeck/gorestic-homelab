@@ -50,6 +50,7 @@ func TestRun_Success_MinimalConfig(t *testing.T) {
 
 	// Set up expectations for minimal config
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test123"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
@@ -80,6 +81,7 @@ func TestRun_WithWOL(t *testing.T) {
 
 	// Standard restic operations
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
@@ -151,6 +153,7 @@ func TestRun_WithPostgres(t *testing.T) {
 
 	// Standard restic operations
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Run(func(ctx context.Context, cfg models.ResticConfig, settings models.BackupSettings) {
 		capturedPaths = settings.Paths
 	}).Return(&models.BackupResult{SnapshotID: "test"}, nil)
@@ -189,8 +192,9 @@ func TestRun_PostgresDumpFailure(t *testing.T) {
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
 
-	// Init succeeds, but postgres dump fails
+	// Init and unlock succeed, but postgres dump fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	postgresSvc.EXPECT().Dump(mock.Anything, mock.Anything, mock.Anything).Return(&models.PostgresDumpResult{Error: errors.New("connection refused")}, nil)
 
 	runner := NewWithServices(
@@ -223,6 +227,7 @@ func TestRun_BackupFailure(t *testing.T) {
 
 	// Init and unlock succeed, backup fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("disk full")}, nil)
 
 	runner := NewWithServices(
@@ -250,6 +255,7 @@ func TestRun_ForgetFailure(t *testing.T) {
 
 	// Backup succeeds, forget fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{Error: errors.New("prune failed")}, nil)
 
@@ -278,6 +284,7 @@ func TestRun_WithCheck(t *testing.T) {
 
 	// All operations succeed including check
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 	resticSvc.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(&models.CheckResult{Passed: true}, nil)
@@ -312,6 +319,7 @@ func TestRun_CheckFailure(t *testing.T) {
 
 	// Backup and forget succeed, check fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 	resticSvc.EXPECT().Check(mock.Anything, mock.Anything, mock.Anything).Return(&models.CheckResult{Passed: false, Error: errors.New("corruption detected")}, nil)
@@ -344,6 +352,7 @@ func TestRun_WithSSHShutdown(t *testing.T) {
 
 	// All operations succeed including SSH shutdown
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: true}, nil)
@@ -381,6 +390,7 @@ func TestRun_SSHShutdownFailure(t *testing.T) {
 
 	// Backup succeeds, SSH shutdown fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 	sshSvc.EXPECT().Shutdown(mock.Anything, mock.Anything).Return(&models.SSHResult{CommandRun: false, Error: errors.New("connection refused")}, nil)
@@ -421,6 +431,7 @@ func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
 
 	// Backup fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
 
 	// SSH shutdown should still be called (deferred)
@@ -504,6 +515,7 @@ func TestRun_WithTelegram_Success(t *testing.T) {
 
 	// Standard operations succeed
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{SnapshotID: "test"}, nil)
 	resticSvc.EXPECT().Forget(mock.Anything, mock.Anything, mock.Anything).Return(&models.ForgetResult{SnapshotsKept: 5, SnapshotsRemoved: 2}, nil)
 
@@ -547,6 +559,7 @@ func TestRun_WithTelegram_Failure(t *testing.T) {
 
 	// Backup fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
 
 	// Telegram notification should still be sent (with failure info)
@@ -606,6 +619,33 @@ func TestRun_ContextCancelled(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRun_UnlockFailure(t *testing.T) {
+	resticSvc := resticmocks.NewMockService(t)
+	wolSvc := wolmocks.NewMockService(t)
+	postgresSvc := postgresmocks.NewMockService(t)
+	sshSvc := sshmocks.NewMockService(t)
+	telegramSvc := telegrammocks.NewMockService(t)
+
+	// Init succeeds, unlock fails (e.g., repository is locked and fail_on_locked is true)
+	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(errors.New("repository has 2 stale lock(s)"))
+
+	runner := NewWithServices(
+		testLogger(),
+		resticSvc,
+		wolSvc,
+		postgresSvc,
+		sshSvc,
+		telegramSvc,
+		t.TempDir(),
+	)
+
+	err := runner.Run(context.Background(), minimalConfig())
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unlock failed")
+}
+
 func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 	// When backup succeeds but SSH shutdown fails, Telegram should include backup stats
 	resticSvc := resticmocks.NewMockService(t)
@@ -618,6 +658,7 @@ func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 
 	// Backup succeeds with stats
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{
 		SnapshotID:          "abc123",
 		FilesNew:            10,
@@ -684,6 +725,7 @@ func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
 
 	// Backup succeeds
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{
 		SnapshotID: "snap123",
 		FilesNew:   20,
@@ -747,6 +789,7 @@ func TestRun_TelegramNoBackupStatsOnBackupFailure(t *testing.T) {
 
 	// Backup fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
+	resticSvc.EXPECT().Unlock(mock.Anything, mock.Anything).Return(nil)
 	resticSvc.EXPECT().Backup(mock.Anything, mock.Anything, mock.Anything).Return(&models.BackupResult{Error: errors.New("backup failed")}, nil)
 
 	// Telegram should NOT include backup stats since backup failed

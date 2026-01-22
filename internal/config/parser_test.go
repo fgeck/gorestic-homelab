@@ -30,6 +30,7 @@ backup:
 	assert.Equal(t, 7, cfg.Retention.KeepDaily)
 	assert.Equal(t, 4, cfg.Retention.KeepWeekly)
 	assert.Equal(t, 6, cfg.Retention.KeepMonthly)
+	assert.True(t, cfg.Restic.FailOnLocked) // Default is true
 }
 
 func TestParser_LoadReader_FullConfig(t *testing.T) {
@@ -442,6 +443,56 @@ backup:
 		expectedHost = "unknown"
 	}
 	assert.Equal(t, expectedHost, cfg.Backup.Host)
+}
+
+func TestParser_LoadReader_FailOnLocked_DefaultTrue(t *testing.T) {
+	yaml := `
+restic:
+  repository: "/backup"
+  password: "secret"
+backup:
+  paths:
+    - /data
+`
+	parser := NewParser()
+	cfg, err := parser.LoadReader(yaml)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.Restic.FailOnLocked)
+}
+
+func TestParser_LoadReader_FailOnLocked_ExplicitTrue(t *testing.T) {
+	yaml := `
+restic:
+  repository: "/backup"
+  password: "secret"
+  fail_on_locked: true
+backup:
+  paths:
+    - /data
+`
+	parser := NewParser()
+	cfg, err := parser.LoadReader(yaml)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.Restic.FailOnLocked)
+}
+
+func TestParser_LoadReader_FailOnLocked_ExplicitFalse(t *testing.T) {
+	yaml := `
+restic:
+  repository: "/backup"
+  password: "secret"
+  fail_on_locked: false
+backup:
+  paths:
+    - /data
+`
+	parser := NewParser()
+	cfg, err := parser.LoadReader(yaml)
+
+	require.NoError(t, err)
+	assert.False(t, cfg.Restic.FailOnLocked)
 }
 
 func TestValidate(t *testing.T) {

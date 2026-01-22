@@ -9,6 +9,10 @@ restic:
   # Repository password - can use environment variable
   password: "${RESTIC_PASSWORD}"
 
+  # Optional: Fail if repository is locked (default: true)
+  # Set to false to auto-remove stale locks from interrupted backups
+  # fail_on_locked: true
+
   # Optional: REST server authentication
   # rest_user: "backup"
   # rest_password: "${REST_PASSWORD}"

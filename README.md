@@ -7,6 +7,7 @@ A Go-based restic backup orchestrator for homelab environments.
 - **Wake-on-LAN**: Wake backup targets before starting
 - **PostgreSQL Backups**: Automated pg_dump with configurable format
 - **Restic Backup**: Full restic backup with retention policies
+- **Lock Handling**: Detect stale locks with configurable auto-removal
 - **SSH Shutdown**: Gracefully shutdown remote servers after backup
 - **Telegram Notifications**: Get notified about backup status
 
@@ -61,38 +62,6 @@ docker run --rm \
   run --config /config.yaml
 ```
 
-### Scheduling with Cron
-
-```cron
-# Run backup daily at 3 AM
-0 3 * * * /usr/local/bin/gorestic-homelab run --config /etc/gorestic/config.yaml
-```
-
-### Scheduling with systemd Timer
-
-```ini
-# /etc/systemd/system/gorestic-backup.service
-[Unit]
-Description=gorestic-homelab backup
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/gorestic-homelab run --config /etc/gorestic/config.yaml
-```
-
-```ini
-# /etc/systemd/system/gorestic-backup.timer
-[Unit]
-Description=Run gorestic-homelab backup daily
-
-[Timer]
-OnCalendar=*-*-* 03:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
 ## Configuration
 
 See [config.example.yaml](config.example.yaml) for a complete example.
@@ -103,10 +72,24 @@ See [config.example.yaml](config.example.yaml) for a complete example.
 restic:
   repository: "rest:http://192.168.1.100:8000/backup/"
   password: "${RESTIC_PASSWORD}"
+  fail_on_locked: true  # optional, default: true
 
 backup:
   paths:
     - /data
+```
+
+#### Lock Handling
+
+By default, `fail_on_locked: true` causes the backup to fail if the repository has stale locks from previous interrupted backups. This is the safe default to prevent concurrent access issues.
+
+Set `fail_on_locked: false` to automatically remove stale locks and continue with the backup:
+
+```yaml
+restic:
+  repository: "rest:http://192.168.1.100:8000/backup/"
+  password: "${RESTIC_PASSWORD}"
+  fail_on_locked: false  # auto-remove stale locks
 ```
 
 ### Environment Variable Expansion
@@ -182,16 +165,19 @@ telegram:
 
 ## Backup Workflow
 
-When you run `gorestic-homelab run`, the following steps are executed in order:
+When you run `gorestic-homelab run`, the following steps are executed:
 
-1. **Wake-on-LAN** (if configured) - Wake the backup target
-2. **Initialize Repository** - Initialize restic repo if needed
-3. **PostgreSQL Dump** (if configured) - Create database dump
-4. **Backup** - Run restic backup
-5. **Retention Policy** - Apply forget/prune rules
-6. **Repository Check** (if enabled) - Verify repository integrity
-7. **SSH Shutdown** (if configured) - Shutdown remote server
-8. **Notification** (if configured) - Send Telegram message
+1. **Wake-on-LAN** (if configured) - Wake the backup target and wait until ready
+2. **Initialize Repository** - Initialize restic repository if it doesn't exist
+3. **Lock Check** - Check for stale locks (fail or auto-remove based on `fail_on_locked`)
+4. **PostgreSQL Dump** (if configured) - Create database dump to temporary file
+5. **Backup** - Run restic backup (includes PostgreSQL dump if created)
+6. **Retention Policy** - Apply forget/prune rules to manage snapshots
+7. **Repository Check** (if enabled) - Verify repository integrity
+
+After completion (success or failure):
+- **SSH Shutdown** (if configured) - Shutdown remote server (only if WOL succeeded or wasn't used)
+- **Telegram Notification** (if configured) - Send status message with backup statistics
 
 ## Development
 
@@ -199,35 +185,69 @@ When you run `gorestic-homelab run`, the following steps are executed in order:
 
 - Go 1.23+
 - Docker (for integration tests)
+- [mockery](https://vektra.github.io/mockery/) (for generating mocks)
+- [golangci-lint](https://golangci-lint.run/) (for linting)
 
-### Building
+### Makefile Commands
 
-```bash
-go build -o gorestic-homelab ./cmd/gorestic-homelab
+Run `make help` to see all available targets:
+
+```
+make help              # Show all available targets
 ```
 
-### Testing
+#### Build & Run
 
 ```bash
-# Unit tests
-go test -v ./...
-
-# Integration tests (requires Docker services)
-docker run -d -p 8000:8000 restic/rest-server
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=test postgres:16
-
-TEST_RESTIC_REPO="rest:http://localhost:8000/test" \
-TEST_RESTIC_PASSWORD="test" \
-TEST_POSTGRES_HOST="localhost" \
-TEST_POSTGRES_PASSWORD="test" \
-TEST_POSTGRES_DB="postgres" \
-go test -tags=integration -v ./integration/...
+make build             # Build the binary
+make run               # Build and run the application
+make clean             # Remove build artifacts
 ```
 
-### Linting
+#### Code Quality
 
 ```bash
-golangci-lint run
+make fmt               # Format code with gofmt
+make fmt-check         # Check code formatting (CI-friendly)
+make vet               # Run go vet
+make lint              # Run golangci-lint
+make all               # Run fmt, lint, vet, test and build
+```
+
+#### Testing
+
+```bash
+make test              # Run unit tests (alias for test-unit)
+make test-unit         # Run unit tests only
+make test-unit-cover   # Run unit tests with coverage
+make test-integration  # Run integration tests only
+make test-e2e          # Run e2e tests only
+make test-all          # Run all tests (unit, integration, e2e)
+make cover             # Generate HTML coverage report
+```
+
+#### Integration Tests
+
+```bash
+make integration-up    # Start Docker services (postgres, restic-rest)
+make integration-down  # Stop Docker services
+make integration-local # Run integration tests with Docker services
+make integration-ci    # Run integration tests in CI
+```
+
+#### Dependencies & Mocks
+
+```bash
+make deps              # Download dependencies
+make deps-tidy         # Tidy dependencies (go mod tidy)
+make mockery           # Generate mocks using mockery
+```
+
+#### Other
+
+```bash
+make docker-build      # Build Docker image
+make install-hooks     # Install git pre-push hooks
 ```
 
 ## License

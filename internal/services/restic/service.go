@@ -186,9 +186,9 @@ func (s *Impl) Init(ctx context.Context, cfg models.ResticConfig) error {
 	return nil
 }
 
-// Unlock removes stale locks from the repository.
-// It first checks if any locks exist, and only runs unlock if needed.
-// This is safe to call even when no locks exist.
+// Unlock checks for and handles stale locks in the repository.
+// If cfg.FailOnLocked is true (default), it returns an error when locks exist.
+// If cfg.FailOnLocked is false, it removes the locks and continues.
 func (s *Impl) Unlock(ctx context.Context, cfg models.ResticConfig) error {
 	s.logger.Debug().Msg("checking for stale locks")
 
@@ -208,6 +208,13 @@ func (s *Impl) Unlock(ctx context.Context, cfg models.ResticConfig) error {
 
 	// Count locks (one ID per line)
 	lockCount := len(bytes.Split(bytes.TrimSpace(output), []byte("\n")))
+
+	// If fail_on_locked is true, return an error instead of removing locks
+	if cfg.FailOnLocked {
+		s.logger.Error().Int("lock_count", lockCount).Msg("repository is locked")
+		return fmt.Errorf("repository has %d stale lock(s); set fail_on_locked: false to auto-remove", lockCount)
+	}
+
 	s.logger.Warn().Int("lock_count", lockCount).Msg("found stale locks, removing")
 
 	// Run unlock to remove stale locks

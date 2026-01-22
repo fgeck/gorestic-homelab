@@ -48,11 +48,18 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 	cfg := &models.BackupConfig{}
 
 	// Parse restic config (required).
+	// Default fail_on_locked to true if not explicitly set
+	failOnLocked := true
+	if p.v.IsSet("restic.fail_on_locked") {
+		failOnLocked = p.v.GetBool("restic.fail_on_locked")
+	}
+
 	cfg.Restic = models.ResticConfig{
 		Repository:   p.expandEnv(p.v.GetString("restic.repository")),
 		Password:     p.expandEnv(p.v.GetString("restic.password")),
 		RestUser:     p.expandEnv(p.v.GetString("restic.rest_user")),
 		RestPassword: p.expandEnv(p.v.GetString("restic.rest_password")),
+		FailOnLocked: failOnLocked,
 	}
 
 	if cfg.Restic.Repository == "" {

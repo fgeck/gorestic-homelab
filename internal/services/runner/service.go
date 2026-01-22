@@ -128,7 +128,14 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 		return fmt.Errorf("init failed: %w", err)
 	}
 
-	// Step 3: PostgreSQL dump (if configured)
+	// Step 3: Unlock repository (remove stale locks)
+	failedStep = "unlock"
+	if err := s.resticSvc.Unlock(ctx, cfg.Restic); err != nil {
+		returnErr = err
+		return fmt.Errorf("unlock failed: %w", err)
+	}
+
+	// Step 4: PostgreSQL dump (if configured)
 	var pgDumpPath string
 	if cfg.Postgres != nil {
 		failedStep = "postgres"
@@ -141,7 +148,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 		defer func() { _ = os.Remove(pgDumpPath) }() // Clean up after backup
 	}
 
-	// Step 4: Backup
+	// Step 5: Backup
 	failedStep = "backup"
 	backupPaths := cfg.Backup.Paths
 	if pgDumpPath != "" {
@@ -165,7 +172,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	// Store backup stats for notification (even if later steps fail)
 	backupStats = backupResult
 
-	// Step 5: Apply retention policy
+	// Step 6: Apply retention policy
 	failedStep = "forget"
 	forgetResult, err := s.resticSvc.Forget(ctx, cfg.Restic, cfg.Retention)
 	if err != nil {
@@ -180,7 +187,7 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	// Store forget stats for notification
 	forgetStats = forgetResult
 
-	// Step 6: Repository check (if enabled)
+	// Step 7: Repository check (if enabled)
 	if cfg.Check.Enabled {
 		failedStep = "check"
 		checkResult, err := s.resticSvc.Check(ctx, cfg.Restic, cfg.Check)

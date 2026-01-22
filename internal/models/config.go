@@ -19,6 +19,7 @@ type ResticConfig struct {
 	Password     string
 	RestUser     string // optional, for REST server auth
 	RestPassword string // optional, for REST server auth
+	FailOnLocked bool   // if true (default), fail when locks exist; if false, remove locks and continue
 }
 
 // BackupSettings holds backup-specific settings.
