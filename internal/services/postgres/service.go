@@ -36,7 +36,7 @@ type DefaultExecutor struct{}
 
 // ExecuteWithEnv runs pg_dump and writes output to the specified file.
 func (e *DefaultExecutor) ExecuteWithEnv(ctx context.Context, env []string, outputPath string, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // name is the pg_dump binary, not user input
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(os.Environ(), env...)
 
 	output, err := os.Create(outputPath) //nolint:gosec // outputPath is controlled by caller

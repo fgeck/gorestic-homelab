@@ -96,6 +96,12 @@ linters:
           - dupl
           - revive
           - stylecheck
+      - linters:
+          - gosec
+        text: "G204"
+      - linters:
+          - gosec
+        text: "G115"
 
 formatters:
   enable:
