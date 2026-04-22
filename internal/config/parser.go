@@ -225,6 +225,27 @@ func (p *Parser) parse() (*models.BackupConfig, error) {
 		}
 	}
 
+	// Parse optional Pushover config.
+	if p.v.IsSet("pushover") {
+		priority := 1
+		if p.v.IsSet("pushover.priority") {
+			priority = p.v.GetInt("pushover.priority")
+		}
+
+		cfg.Pushover = &models.PushoverConfig{
+			AppToken: p.expandEnv(p.v.GetString("pushover.app_token")),
+			UserKey:  p.expandEnv(p.v.GetString("pushover.user_key")),
+			Priority: priority,
+		}
+
+		if cfg.Pushover.AppToken == "" {
+			return nil, fmt.Errorf("pushover.app_token is required when pushover is configured")
+		}
+		if cfg.Pushover.UserKey == "" {
+			return nil, fmt.Errorf("pushover.user_key is required when pushover is configured")
+		}
+	}
+
 	return cfg, nil
 }
 

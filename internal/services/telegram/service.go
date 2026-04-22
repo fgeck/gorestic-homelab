@@ -120,30 +120,30 @@ func (s *Impl) formatMessage(msg models.TelegramMessage) string {
 	}
 
 	// Basic info
-	b.WriteString(fmt.Sprintf("🖥 <b>Host:</b> %s\n", escapeHTML(msg.Host)))
-	b.WriteString(fmt.Sprintf("📁 <b>Repository:</b> %s\n", escapeHTML(msg.Repository)))
-	b.WriteString(fmt.Sprintf("⏰ <b>Started:</b> %s\n", msg.StartTime.Format("2006-01-02 15:04:05")))
-	b.WriteString(fmt.Sprintf("⏱ <b>Duration:</b> %s\n", msg.Duration.Round(time.Second)))
+	fmt.Fprintf(&b, "🖥 <b>Host:</b> %s\n", escapeHTML(msg.Host))
+	fmt.Fprintf(&b, "📁 <b>Repository:</b> %s\n", escapeHTML(msg.Repository))
+	fmt.Fprintf(&b, "⏰ <b>Started:</b> %s\n", msg.StartTime.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&b, "⏱ <b>Duration:</b> %s\n", msg.Duration.Round(time.Second))
 
 	if msg.Success {
 		b.WriteString("\n<b>📊 Backup Statistics:</b>\n")
-		b.WriteString(fmt.Sprintf("  • Snapshot: <code>%s</code>\n", msg.SnapshotID))
-		b.WriteString(fmt.Sprintf("  • Files new: %d\n", msg.FilesNew))
-		b.WriteString(fmt.Sprintf("  • Files changed: %d\n", msg.FilesChanged))
-		b.WriteString(fmt.Sprintf("  • Files unmodified: %d\n", msg.FilesUnmodified))
-		b.WriteString(fmt.Sprintf("  • Data added: %s\n", formatBytes(msg.DataAdded)))
-		b.WriteString(fmt.Sprintf("  • Total files: %d\n", msg.TotalFiles))
-		b.WriteString(fmt.Sprintf("  • Total size: %s\n", formatBytes(msg.TotalBytes)))
+		fmt.Fprintf(&b, "  • Snapshot: <code>%s</code>\n", msg.SnapshotID)
+		fmt.Fprintf(&b, "  • Files new: %d\n", msg.FilesNew)
+		fmt.Fprintf(&b, "  • Files changed: %d\n", msg.FilesChanged)
+		fmt.Fprintf(&b, "  • Files unmodified: %d\n", msg.FilesUnmodified)
+		fmt.Fprintf(&b, "  • Data added: %s\n", formatBytes(msg.DataAdded))
+		fmt.Fprintf(&b, "  • Total files: %d\n", msg.TotalFiles)
+		fmt.Fprintf(&b, "  • Total size: %s\n", formatBytes(msg.TotalBytes))
 
 		if msg.SnapshotsRemoved > 0 || msg.SnapshotsKept > 0 {
 			b.WriteString("\n<b>🗑 Retention:</b>\n")
-			b.WriteString(fmt.Sprintf("  • Snapshots kept: %d\n", msg.SnapshotsKept))
-			b.WriteString(fmt.Sprintf("  • Snapshots removed: %d\n", msg.SnapshotsRemoved))
+			fmt.Fprintf(&b, "  • Snapshots kept: %d\n", msg.SnapshotsKept)
+			fmt.Fprintf(&b, "  • Snapshots removed: %d\n", msg.SnapshotsRemoved)
 		}
 	} else {
 		b.WriteString("\n<b>⚠️ Error Details:</b>\n")
-		b.WriteString(fmt.Sprintf("  • Failed step: %s\n", escapeHTML(msg.FailedStep)))
-		b.WriteString(fmt.Sprintf("  • Error: <code>%s</code>\n", escapeHTML(msg.ErrorMessage)))
+		fmt.Fprintf(&b, "  • Failed step: %s\n", escapeHTML(msg.FailedStep))
+		fmt.Fprintf(&b, "  • Error: <code>%s</code>\n", escapeHTML(msg.ErrorMessage))
 	}
 
 	return b.String()

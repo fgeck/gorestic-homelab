@@ -9,6 +9,7 @@ import (
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
 	postgresmocks "github.com/fgeck/gorestic-homelab/internal/services/postgres/mocks"
+	pushovermocks "github.com/fgeck/gorestic-homelab/internal/services/pushover/mocks"
 	resticmocks "github.com/fgeck/gorestic-homelab/internal/services/restic/mocks"
 	sshmocks "github.com/fgeck/gorestic-homelab/internal/services/ssh/mocks"
 	telegrammocks "github.com/fgeck/gorestic-homelab/internal/services/telegram/mocks"
@@ -47,6 +48,7 @@ func TestRun_Success_MinimalConfig(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Set up expectations for minimal config
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -61,6 +63,7 @@ func TestRun_Success_MinimalConfig(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -75,6 +78,7 @@ func TestRun_WithWOL(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// WOL should be called
 	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{PacketSent: true, TargetReady: true}, nil)
@@ -92,6 +96,7 @@ func TestRun_WithWOL(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -114,6 +119,7 @@ func TestRun_WOLFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// WOL fails
 	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{Error: errors.New("timeout")}, nil)
@@ -125,6 +131,7 @@ func TestRun_WOLFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -145,6 +152,7 @@ func TestRun_WithPostgres(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedPaths []string
 
@@ -166,6 +174,7 @@ func TestRun_WithPostgres(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -191,6 +200,7 @@ func TestRun_PostgresDumpFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Init and unlock succeed, but postgres dump fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -204,6 +214,7 @@ func TestRun_PostgresDumpFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -224,6 +235,7 @@ func TestRun_BackupFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Init and unlock succeed, backup fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -237,6 +249,7 @@ func TestRun_BackupFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -252,6 +265,7 @@ func TestRun_ForgetFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Backup succeeds, forget fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -266,6 +280,7 @@ func TestRun_ForgetFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -281,6 +296,7 @@ func TestRun_WithCheck(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// All operations succeed including check
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -296,6 +312,7 @@ func TestRun_WithCheck(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -316,6 +333,7 @@ func TestRun_CheckFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Backup and forget succeed, check fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -331,6 +349,7 @@ func TestRun_CheckFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -349,6 +368,7 @@ func TestRun_WithSSHShutdown(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// All operations succeed including SSH shutdown
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -364,6 +384,7 @@ func TestRun_WithSSHShutdown(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -387,6 +408,7 @@ func TestRun_SSHShutdownFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Backup succeeds, SSH shutdown fails
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -402,6 +424,7 @@ func TestRun_SSHShutdownFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -425,6 +448,7 @@ func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// WOL succeeds
 	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{PacketSent: true, TargetReady: true}, nil)
@@ -444,6 +468,7 @@ func TestRun_SSHShutdownRunsOnBackupFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -471,6 +496,7 @@ func TestRun_SSHShutdownSkippedWhenWOLFails(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// WOL fails
 	wolSvc.EXPECT().Wake(mock.Anything, mock.Anything).Return(&models.WOLResult{Error: errors.New("WOL failed")}, nil)
@@ -484,6 +510,7 @@ func TestRun_SSHShutdownSkippedWhenWOLFails(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -510,6 +537,7 @@ func TestRun_WithTelegram_Success(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedMsg models.TelegramMessage
 
@@ -531,6 +559,7 @@ func TestRun_WithTelegram_Success(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -554,6 +583,7 @@ func TestRun_WithTelegram_Failure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedMsg models.TelegramMessage
 
@@ -574,6 +604,7 @@ func TestRun_WithTelegram_Failure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -597,6 +628,7 @@ func TestRun_ContextCancelled(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Init returns context error
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(context.Canceled)
@@ -608,6 +640,7 @@ func TestRun_ContextCancelled(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -625,6 +658,7 @@ func TestRun_UnlockFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	// Init succeeds, unlock fails (e.g., repository is locked and fail_on_locked is true)
 	resticSvc.EXPECT().Init(mock.Anything, mock.Anything).Return(nil)
@@ -637,6 +671,7 @@ func TestRun_UnlockFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -653,6 +688,7 @@ func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedMsg models.TelegramMessage
 
@@ -685,6 +721,7 @@ func TestRun_TelegramIncludesBackupStatsOnSSHFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -720,6 +757,7 @@ func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedMsg models.TelegramMessage
 
@@ -753,6 +791,7 @@ func TestRun_TelegramIncludesForgetStatsOnCheckFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 
@@ -784,6 +823,7 @@ func TestRun_TelegramNoBackupStatsOnBackupFailure(t *testing.T) {
 	postgresSvc := postgresmocks.NewMockService(t)
 	sshSvc := sshmocks.NewMockService(t)
 	telegramSvc := telegrammocks.NewMockService(t)
+	pushoverSvc := pushovermocks.NewMockService(t)
 
 	var capturedMsg models.TelegramMessage
 
@@ -804,6 +844,7 @@ func TestRun_TelegramNoBackupStatsOnBackupFailure(t *testing.T) {
 		postgresSvc,
 		sshSvc,
 		telegramSvc,
+		pushoverSvc,
 		t.TempDir(),
 	)
 

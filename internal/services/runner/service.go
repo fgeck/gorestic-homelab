@@ -10,6 +10,7 @@ import (
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
 	"github.com/fgeck/gorestic-homelab/internal/services/postgres"
+	"github.com/fgeck/gorestic-homelab/internal/services/pushover"
 	"github.com/fgeck/gorestic-homelab/internal/services/restic"
 	"github.com/fgeck/gorestic-homelab/internal/services/ssh"
 	"github.com/fgeck/gorestic-homelab/internal/services/telegram"
@@ -29,6 +30,7 @@ type Impl struct {
 	postgresSvc postgres.Service
 	sshSvc      ssh.Service
 	telegramSvc telegram.Service
+	pushoverSvc pushover.Service
 	logger      zerolog.Logger
 	tempDir     string
 }
@@ -41,6 +43,7 @@ func New(logger zerolog.Logger) *Impl {
 		postgresSvc: postgres.New(logger),
 		sshSvc:      ssh.New(logger),
 		telegramSvc: telegram.New(logger),
+		pushoverSvc: pushover.New(logger),
 		logger:      logger,
 		tempDir:     os.TempDir(),
 	}
@@ -54,6 +57,7 @@ func NewWithServices(
 	postgresSvc postgres.Service,
 	sshSvc ssh.Service,
 	telegramSvc telegram.Service,
+	pushoverSvc pushover.Service,
 	tempDir string,
 ) *Impl {
 	return &Impl{
@@ -62,6 +66,7 @@ func NewWithServices(
 		postgresSvc: postgresSvc,
 		sshSvc:      sshSvc,
 		telegramSvc: telegramSvc,
+		pushoverSvc: pushoverSvc,
 		logger:      logger,
 		tempDir:     tempDir,
 	}
@@ -89,6 +94,9 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	defer func() {
 		if cfg.Telegram != nil {
 			s.sendNotificationWithStats(ctx, cfg, startTime, failedStep, returnErr, backupStats, forgetStats)
+		}
+		if cfg.Pushover != nil {
+			s.sendPushoverNotification(ctx, cfg, startTime, failedStep, returnErr, backupStats, forgetStats)
 		}
 	}()
 
@@ -269,6 +277,62 @@ func (s *Impl) runSSHShutdown(ctx context.Context, cfg *models.SSHShutdownConfig
 	return nil
 }
 
+// notificationStats holds the common data used to build notification messages.
+type notificationStats struct {
+	success          bool
+	host             string
+	repository       string
+	startTime        time.Time
+	duration         time.Duration
+	failedStep       string
+	errorMessage     string
+	snapshotID       string
+	filesNew         int
+	filesChanged     int
+	filesUnmodified  int
+	dataAdded        int64
+	totalFiles       int
+	totalBytes       int64
+	snapshotsKept    int
+	snapshotsRemoved int
+}
+
+func buildStats(
+	startTime time.Time,
+	cfg models.BackupConfig,
+	failedStep string,
+	runErr error,
+	backupStats *models.BackupResult,
+	forgetStats *models.ForgetResult,
+) notificationStats {
+	s := notificationStats{
+		success:    runErr == nil,
+		host:       cfg.Backup.Host,
+		repository: cfg.Restic.Repository,
+		startTime:  startTime,
+		duration:   time.Since(startTime),
+	}
+	if runErr != nil {
+		s.failedStep = failedStep
+		s.errorMessage = runErr.Error()
+	}
+	if backupStats != nil {
+		s.snapshotID = backupStats.SnapshotID
+		s.filesNew = backupStats.FilesNew
+		s.filesChanged = backupStats.FilesChanged
+		s.filesUnmodified = backupStats.FilesUnmodified
+		s.dataAdded = backupStats.DataAdded
+		s.totalFiles = backupStats.TotalFilesProcessed
+		s.totalBytes = backupStats.TotalBytesProcessed
+	}
+	if forgetStats != nil {
+		s.snapshotsKept = forgetStats.SnapshotsKept
+		s.snapshotsRemoved = forgetStats.SnapshotsRemoved
+	}
+	return s
+}
+
+//nolint:dupl // structurally similar to sendPushoverNotification by design — same stats, different message types and services
 func (s *Impl) sendNotificationWithStats(
 	ctx context.Context,
 	cfg models.BackupConfig,
@@ -278,35 +342,26 @@ func (s *Impl) sendNotificationWithStats(
 	backupStats *models.BackupResult,
 	forgetStats *models.ForgetResult,
 ) {
+	ns := buildStats(startTime, cfg, failedStep, runErr, backupStats, forgetStats)
+
 	// Collect backup stats for notification
 	msg := models.TelegramMessage{
-		Success:    runErr == nil,
-		Host:       cfg.Backup.Host,
-		Repository: cfg.Restic.Repository,
-		StartTime:  startTime,
-		Duration:   time.Since(startTime),
-	}
-
-	if runErr != nil {
-		msg.FailedStep = failedStep
-		msg.ErrorMessage = runErr.Error()
-	}
-
-	// Include backup stats if backup succeeded (even if later steps failed)
-	if backupStats != nil {
-		msg.SnapshotID = backupStats.SnapshotID
-		msg.FilesNew = backupStats.FilesNew
-		msg.FilesChanged = backupStats.FilesChanged
-		msg.FilesUnmodified = backupStats.FilesUnmodified
-		msg.DataAdded = backupStats.DataAdded
-		msg.TotalFiles = backupStats.TotalFilesProcessed
-		msg.TotalBytes = backupStats.TotalBytesProcessed
-	}
-
-	// Include retention stats if forget succeeded
-	if forgetStats != nil {
-		msg.SnapshotsKept = forgetStats.SnapshotsKept
-		msg.SnapshotsRemoved = forgetStats.SnapshotsRemoved
+		Success:          ns.success,
+		Host:             ns.host,
+		Repository:       ns.repository,
+		StartTime:        ns.startTime,
+		Duration:         ns.duration,
+		FailedStep:       ns.failedStep,
+		ErrorMessage:     ns.errorMessage,
+		SnapshotID:       ns.snapshotID,
+		FilesNew:         ns.filesNew,
+		FilesChanged:     ns.filesChanged,
+		FilesUnmodified:  ns.filesUnmodified,
+		DataAdded:        ns.dataAdded,
+		TotalFiles:       ns.totalFiles,
+		TotalBytes:       ns.totalBytes,
+		SnapshotsKept:    ns.snapshotsKept,
+		SnapshotsRemoved: ns.snapshotsRemoved,
 	}
 
 	result, err := s.telegramSvc.SendNotification(ctx, *cfg.Telegram, msg)
@@ -316,5 +371,46 @@ func (s *Impl) sendNotificationWithStats(
 	}
 	if result.Error != nil {
 		s.logger.Error().Err(result.Error).Msg("failed to send Telegram notification")
+	}
+}
+
+//nolint:dupl // structurally similar to sendNotificationWithStats by design — same stats, different message types and services
+func (s *Impl) sendPushoverNotification(
+	ctx context.Context,
+	cfg models.BackupConfig,
+	startTime time.Time,
+	failedStep string,
+	runErr error,
+	backupStats *models.BackupResult,
+	forgetStats *models.ForgetResult,
+) {
+	ns := buildStats(startTime, cfg, failedStep, runErr, backupStats, forgetStats)
+
+	msg := models.PushoverMessage{
+		Success:          ns.success,
+		Host:             ns.host,
+		Repository:       ns.repository,
+		StartTime:        ns.startTime,
+		Duration:         ns.duration,
+		FailedStep:       ns.failedStep,
+		ErrorMessage:     ns.errorMessage,
+		SnapshotID:       ns.snapshotID,
+		FilesNew:         ns.filesNew,
+		FilesChanged:     ns.filesChanged,
+		FilesUnmodified:  ns.filesUnmodified,
+		DataAdded:        ns.dataAdded,
+		TotalFiles:       ns.totalFiles,
+		TotalBytes:       ns.totalBytes,
+		SnapshotsKept:    ns.snapshotsKept,
+		SnapshotsRemoved: ns.snapshotsRemoved,
+	}
+
+	result, err := s.pushoverSvc.SendNotification(ctx, *cfg.Pushover, msg)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to send Pushover notification")
+		return
+	}
+	if result.Error != nil {
+		s.logger.Error().Err(result.Error).Msg("failed to send Pushover notification")
 	}
 }
