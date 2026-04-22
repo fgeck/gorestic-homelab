@@ -38,13 +38,13 @@ type DefaultExecutor struct{}
 
 // Execute runs a command and returns its output.
 func (e *DefaultExecutor) Execute(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // name is the restic binary, not user input
 	return cmd.CombinedOutput()
 }
 
 // ExecuteWithEnv runs a command with additional environment variables.
 func (e *DefaultExecutor) ExecuteWithEnv(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // name is the restic binary, not user input
 	cmd.Env = append(os.Environ(), env...)
 	return cmd.CombinedOutput()
 }
@@ -119,7 +119,7 @@ func formatWithCommas(n uint64) string {
 		if i > 0 && (len(s)-i)%3 == 0 {
 			result = append(result, ',')
 		}
-		result = append(result, byte(c))
+		result = append(result, byte(c)) //nolint:gosec // c is a safe ASCII rune from a controlled set
 	}
 	return string(result)
 }
