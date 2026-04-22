@@ -10,6 +10,7 @@ import (
 
 	"github.com/fgeck/gorestic-homelab/internal/models"
 	"github.com/fgeck/gorestic-homelab/internal/services/postgres"
+	"github.com/fgeck/gorestic-homelab/internal/services/pushover"
 	"github.com/fgeck/gorestic-homelab/internal/services/restic"
 	"github.com/fgeck/gorestic-homelab/internal/services/ssh"
 	"github.com/fgeck/gorestic-homelab/internal/services/telegram"
@@ -29,6 +30,7 @@ type Impl struct {
 	postgresSvc postgres.Service
 	sshSvc      ssh.Service
 	telegramSvc telegram.Service
+	pushoverSvc pushover.Service
 	logger      zerolog.Logger
 	tempDir     string
 }
@@ -41,6 +43,7 @@ func New(logger zerolog.Logger) *Impl {
 		postgresSvc: postgres.New(logger),
 		sshSvc:      ssh.New(logger),
 		telegramSvc: telegram.New(logger),
+		pushoverSvc: pushover.New(logger),
 		logger:      logger,
 		tempDir:     os.TempDir(),
 	}
@@ -54,6 +57,7 @@ func NewWithServices(
 	postgresSvc postgres.Service,
 	sshSvc ssh.Service,
 	telegramSvc telegram.Service,
+	pushoverSvc pushover.Service,
 	tempDir string,
 ) *Impl {
 	return &Impl{
@@ -62,6 +66,7 @@ func NewWithServices(
 		postgresSvc: postgresSvc,
 		sshSvc:      sshSvc,
 		telegramSvc: telegramSvc,
+		pushoverSvc: pushoverSvc,
 		logger:      logger,
 		tempDir:     tempDir,
 	}
@@ -89,6 +94,9 @@ func (s *Impl) Run(ctx context.Context, cfg models.BackupConfig) (returnErr erro
 	defer func() {
 		if cfg.Telegram != nil {
 			s.sendNotificationWithStats(ctx, cfg, startTime, failedStep, returnErr, backupStats, forgetStats)
+		}
+		if cfg.Pushover != nil {
+			s.sendPushoverNotification(ctx, cfg, startTime, failedStep, returnErr, backupStats, forgetStats)
 		}
 	}()
 
@@ -316,5 +324,52 @@ func (s *Impl) sendNotificationWithStats(
 	}
 	if result.Error != nil {
 		s.logger.Error().Err(result.Error).Msg("failed to send Telegram notification")
+	}
+}
+
+func (s *Impl) sendPushoverNotification(
+	ctx context.Context,
+	cfg models.BackupConfig,
+	startTime time.Time,
+	failedStep string,
+	runErr error,
+	backupStats *models.BackupResult,
+	forgetStats *models.ForgetResult,
+) {
+	msg := models.PushoverMessage{
+		Success:    runErr == nil,
+		Host:       cfg.Backup.Host,
+		Repository: cfg.Restic.Repository,
+		StartTime:  startTime,
+		Duration:   time.Since(startTime),
+	}
+
+	if runErr != nil {
+		msg.FailedStep = failedStep
+		msg.ErrorMessage = runErr.Error()
+	}
+
+	if backupStats != nil {
+		msg.SnapshotID = backupStats.SnapshotID
+		msg.FilesNew = backupStats.FilesNew
+		msg.FilesChanged = backupStats.FilesChanged
+		msg.FilesUnmodified = backupStats.FilesUnmodified
+		msg.DataAdded = backupStats.DataAdded
+		msg.TotalFiles = backupStats.TotalFilesProcessed
+		msg.TotalBytes = backupStats.TotalBytesProcessed
+	}
+
+	if forgetStats != nil {
+		msg.SnapshotsKept = forgetStats.SnapshotsKept
+		msg.SnapshotsRemoved = forgetStats.SnapshotsRemoved
+	}
+
+	result, err := s.pushoverSvc.SendNotification(ctx, *cfg.Pushover, msg)
+	if err != nil {
+		s.logger.Error().Err(err).Msg("failed to send Pushover notification")
+		return
+	}
+	if result.Error != nil {
+		s.logger.Error().Err(result.Error).Msg("failed to send Pushover notification")
 	}
 }

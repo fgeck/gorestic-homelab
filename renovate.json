@@ -10,11 +10,6 @@
   "platformAutomerge": true,
   "packageRules": [
     {
-      "description": "Automerge all minor and patch updates",
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "automerge": true
-    },
-    {
       "description": "Major updates - require review",
       "matchUpdateTypes": ["major"],
       "automerge": false

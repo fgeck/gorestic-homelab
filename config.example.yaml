@@ -78,3 +78,10 @@ check:
 # telegram:
 #   bot_token: "${TELEGRAM_BOT_TOKEN}"
 #   chat_id: "${TELEGRAM_CHAT_ID}"
+
+# Pushover notification configuration (optional)
+# Uncomment to receive backup notifications via Pushover
+# pushover:
+#   app_token: "${PUSHOVER_APP_TOKEN}"
+#   user_key: "${PUSHOVER_USER_KEY}"
+#   priority: 1  # -2 (lowest) to 2 (emergency), default: 1 (high)

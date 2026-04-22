@@ -11,6 +11,7 @@ type BackupConfig struct {
 	Postgres    *PostgresConfig    // nil if not configured
 	SSHShutdown *SSHShutdownConfig // nil if not configured
 	Telegram    *TelegramConfig    // nil if not configured
+	Pushover    *PushoverConfig    // nil if not configured
 }
 
 // ResticConfig holds restic repository configuration.
