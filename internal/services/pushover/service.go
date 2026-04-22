@@ -108,30 +108,30 @@ func (s *Impl) formatMessage(msg models.PushoverMessage) (string, string) {
 
 	var b bytes.Buffer
 
-	b.WriteString(fmt.Sprintf("Host: %s\n", msg.Host))
-	b.WriteString(fmt.Sprintf("Repository: %s\n", msg.Repository))
-	b.WriteString(fmt.Sprintf("Started: %s\n", msg.StartTime.Format("2006-01-02 15:04:05")))
-	b.WriteString(fmt.Sprintf("Duration: %s\n", msg.Duration.Round(time.Second)))
+	fmt.Fprintf(&b, "Host: %s\n", msg.Host)
+	fmt.Fprintf(&b, "Repository: %s\n", msg.Repository)
+	fmt.Fprintf(&b, "Started: %s\n", msg.StartTime.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&b, "Duration: %s\n", msg.Duration.Round(time.Second))
 
 	if msg.Success {
 		b.WriteString("\nBackup Statistics:\n")
-		b.WriteString(fmt.Sprintf("  Snapshot: %s\n", msg.SnapshotID))
-		b.WriteString(fmt.Sprintf("  Files new: %d\n", msg.FilesNew))
-		b.WriteString(fmt.Sprintf("  Files changed: %d\n", msg.FilesChanged))
-		b.WriteString(fmt.Sprintf("  Files unmodified: %d\n", msg.FilesUnmodified))
-		b.WriteString(fmt.Sprintf("  Data added: %s\n", formatBytes(msg.DataAdded)))
-		b.WriteString(fmt.Sprintf("  Total files: %d\n", msg.TotalFiles))
-		b.WriteString(fmt.Sprintf("  Total size: %s\n", formatBytes(msg.TotalBytes)))
+		fmt.Fprintf(&b, "  Snapshot: %s\n", msg.SnapshotID)
+		fmt.Fprintf(&b, "  Files new: %d\n", msg.FilesNew)
+		fmt.Fprintf(&b, "  Files changed: %d\n", msg.FilesChanged)
+		fmt.Fprintf(&b, "  Files unmodified: %d\n", msg.FilesUnmodified)
+		fmt.Fprintf(&b, "  Data added: %s\n", formatBytes(msg.DataAdded))
+		fmt.Fprintf(&b, "  Total files: %d\n", msg.TotalFiles)
+		fmt.Fprintf(&b, "  Total size: %s\n", formatBytes(msg.TotalBytes))
 
 		if msg.SnapshotsRemoved > 0 || msg.SnapshotsKept > 0 {
 			b.WriteString("\nRetention:\n")
-			b.WriteString(fmt.Sprintf("  Snapshots kept: %d\n", msg.SnapshotsKept))
-			b.WriteString(fmt.Sprintf("  Snapshots removed: %d\n", msg.SnapshotsRemoved))
+			fmt.Fprintf(&b, "  Snapshots kept: %d\n", msg.SnapshotsKept)
+			fmt.Fprintf(&b, "  Snapshots removed: %d\n", msg.SnapshotsRemoved)
 		}
 	} else {
 		b.WriteString("\nError Details:\n")
-		b.WriteString(fmt.Sprintf("  Failed step: %s\n", msg.FailedStep))
-		b.WriteString(fmt.Sprintf("  Error: %s\n", msg.ErrorMessage))
+		fmt.Fprintf(&b, "  Failed step: %s\n", msg.FailedStep)
+		fmt.Fprintf(&b, "  Error: %s\n", msg.ErrorMessage)
 	}
 
 	return title, b.String()
