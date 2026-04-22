@@ -279,21 +279,21 @@ func (s *Impl) runSSHShutdown(ctx context.Context, cfg *models.SSHShutdownConfig
 
 // notificationStats holds the common data used to build notification messages.
 type notificationStats struct {
-	success         bool
-	host            string
-	repository      string
-	startTime       time.Time
-	duration        time.Duration
-	failedStep      string
-	errorMessage    string
-	snapshotID      string
-	filesNew        int
-	filesChanged    int
-	filesUnmodified int
-	dataAdded       int64
-	totalFiles      int
-	totalBytes      int64
-	snapshotsKept   int
+	success          bool
+	host             string
+	repository       string
+	startTime        time.Time
+	duration         time.Duration
+	failedStep       string
+	errorMessage     string
+	snapshotID       string
+	filesNew         int
+	filesChanged     int
+	filesUnmodified  int
+	dataAdded        int64
+	totalFiles       int
+	totalBytes       int64
+	snapshotsKept    int
 	snapshotsRemoved int
 }
 
@@ -332,6 +332,7 @@ func buildStats(
 	return s
 }
 
+//nolint:dupl // structurally similar to sendPushoverNotification by design — same stats, different message types and services
 func (s *Impl) sendNotificationWithStats(
 	ctx context.Context,
 	cfg models.BackupConfig,
@@ -345,21 +346,21 @@ func (s *Impl) sendNotificationWithStats(
 
 	// Collect backup stats for notification
 	msg := models.TelegramMessage{
-		Success:         ns.success,
-		Host:            ns.host,
-		Repository:      ns.repository,
-		StartTime:       ns.startTime,
-		Duration:        ns.duration,
-		FailedStep:      ns.failedStep,
-		ErrorMessage:    ns.errorMessage,
-		SnapshotID:      ns.snapshotID,
-		FilesNew:        ns.filesNew,
-		FilesChanged:    ns.filesChanged,
-		FilesUnmodified: ns.filesUnmodified,
-		DataAdded:       ns.dataAdded,
-		TotalFiles:      ns.totalFiles,
-		TotalBytes:      ns.totalBytes,
-		SnapshotsKept:   ns.snapshotsKept,
+		Success:          ns.success,
+		Host:             ns.host,
+		Repository:       ns.repository,
+		StartTime:        ns.startTime,
+		Duration:         ns.duration,
+		FailedStep:       ns.failedStep,
+		ErrorMessage:     ns.errorMessage,
+		SnapshotID:       ns.snapshotID,
+		FilesNew:         ns.filesNew,
+		FilesChanged:     ns.filesChanged,
+		FilesUnmodified:  ns.filesUnmodified,
+		DataAdded:        ns.dataAdded,
+		TotalFiles:       ns.totalFiles,
+		TotalBytes:       ns.totalBytes,
+		SnapshotsKept:    ns.snapshotsKept,
 		SnapshotsRemoved: ns.snapshotsRemoved,
 	}
 
@@ -373,6 +374,7 @@ func (s *Impl) sendNotificationWithStats(
 	}
 }
 
+//nolint:dupl // structurally similar to sendNotificationWithStats by design — same stats, different message types and services
 func (s *Impl) sendPushoverNotification(
 	ctx context.Context,
 	cfg models.BackupConfig,
@@ -385,21 +387,21 @@ func (s *Impl) sendPushoverNotification(
 	ns := buildStats(startTime, cfg, failedStep, runErr, backupStats, forgetStats)
 
 	msg := models.PushoverMessage{
-		Success:         ns.success,
-		Host:            ns.host,
-		Repository:      ns.repository,
-		StartTime:       ns.startTime,
-		Duration:        ns.duration,
-		FailedStep:      ns.failedStep,
-		ErrorMessage:    ns.errorMessage,
-		SnapshotID:      ns.snapshotID,
-		FilesNew:        ns.filesNew,
-		FilesChanged:    ns.filesChanged,
-		FilesUnmodified: ns.filesUnmodified,
-		DataAdded:       ns.dataAdded,
-		TotalFiles:      ns.totalFiles,
-		TotalBytes:      ns.totalBytes,
-		SnapshotsKept:   ns.snapshotsKept,
+		Success:          ns.success,
+		Host:             ns.host,
+		Repository:       ns.repository,
+		StartTime:        ns.startTime,
+		Duration:         ns.duration,
+		FailedStep:       ns.failedStep,
+		ErrorMessage:     ns.errorMessage,
+		SnapshotID:       ns.snapshotID,
+		FilesNew:         ns.filesNew,
+		FilesChanged:     ns.filesChanged,
+		FilesUnmodified:  ns.filesUnmodified,
+		DataAdded:        ns.dataAdded,
+		TotalFiles:       ns.totalFiles,
+		TotalBytes:       ns.totalBytes,
+		SnapshotsKept:    ns.snapshotsKept,
 		SnapshotsRemoved: ns.snapshotsRemoved,
 	}
 
